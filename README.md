@@ -1,7 +1,7 @@
 Belldog
 =======
 
-Proxy webhook requests to Slack. Clarify webhook URLs to indicate target channel name. Simplify webhook issusing process and management.
+Proxy webhook requests to Slack. Clarify webhook URLs to indicate target channel name. Simplify webhook issuing process and management.
 
 ## Usage
 ### Standard scenario
