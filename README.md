@@ -56,7 +56,7 @@ Belldog recommends 2 individual Lambda functions to work.
 
 Optional:
 
-- `CUSTOM_DOMAIN_NAME`: Custom domain name to be used to reach to Belldog instance. If omitted, host/authority HTTP filed will be used.
+- `CUSTOM_DOMAIN_NAME`: Custom domain name to be used to reach to Belldog instance. If omitted, host/authority HTTP field will be used.
 
 ### Slack permissions
 Posting messages:
