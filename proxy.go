@@ -151,7 +151,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 	}
 
 	kit := slack.NewKit(slackToken)
-	if err := kit.PostMessage(ctx, res.ChannelID, payload); err != nil {
+	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
 		return response{}, fmt.Errorf("PostMessage failed: %w", err)
 	}
 

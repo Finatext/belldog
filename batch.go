@@ -59,7 +59,7 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 		msgOps := fmt.Sprintf("Token is in migration: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
 		fmt.Print(msgOps)
 		msg := fmt.Sprintf("Token is in migration. Once all old webhook URLs are replaced, revoke old token: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
-		if err := notify(ctx, kit, rec.ChannelID, msg, msgOps); err != nil {
+		if err := notify(ctx, kit, rec.ChannelID, rec.ChannelName, msg, msgOps); err != nil {
 			return fmt.Errorf("notify failed: %w", err)
 		}
 	}
@@ -74,21 +74,21 @@ Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, re
 3. When all old URLs are replaced, revoke old token with the "revoke renamed slash command" with channel_name=%s and token=%s
 		`
 		msg := fmt.Sprintf(format, evt.channelID, evt.oldName, evt.newName, evt.oldName, evt.savedToken)
-		if err := notify(ctx, kit, evt.channelID, msg, msgOps); err != nil {
+		if err := notify(ctx, kit, evt.channelID, evt.newName, msg, msgOps); err != nil {
 			return fmt.Errorf("notify failed: %w", err)
 		}
 	}
 	return nil
 }
 
-func notify(ctx context.Context, kit slack.Kit, channelID string, msg string, msgOps string) error {
+func notify(ctx context.Context, kit slack.Kit, channelID string, channelName string, msg string, msgOps string) error {
 	payload := map[string]interface{}{"text": msg}
-	if err := kit.PostMessage(ctx, channelID, payload); err != nil {
+	if err := kit.PostMessage(ctx, channelID, channelName, payload); err != nil {
 		return fmt.Errorf("kit.PostMessage failed: %w", err)
 	}
 	payloadOps := map[string]interface{}{"text": msgOps}
 	// kit.PostMessage can accept channel name as channel id.
-	if err := kit.PostMessage(ctx, opsNotificationChannelName, payloadOps); err != nil {
+	if err := kit.PostMessage(ctx, opsNotificationChannelName, opsNotificationChannelName, payloadOps); err != nil {
 		return fmt.Errorf("kit.PostMessage failed: %w", err)
 	}
 	return nil
