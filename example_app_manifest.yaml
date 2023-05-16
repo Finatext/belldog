@@ -1,0 +1,47 @@
+display_information:
+  name: Belldog
+  description: Manage and proxy Slack webhooks
+  background_color: "#7a5d41"
+features:
+  bot_user:
+    display_name: Belldog
+    always_online: true
+  slash_commands:
+    # TODO: Edit URLs
+    - command: /belldog-show
+      url: https://example.com/slash/
+      description: Show all tokens connected to this channel.
+      should_escape: false
+    - command: /belldog-generate
+      url: https://example.com/slash/
+      description: Generate token and webhook URL.
+      should_escape: false
+    - command: /belldog-regenerate
+      url: https://example.com/slash/
+      description: Regenerate another token and URL.
+      should_escape: false
+    - command: /belldog-revoke
+      url: https://example.com/slash/
+      description: Revoke token. Only available in the channel in which the token was
+        generated.
+      usage_hint: <token>
+      should_escape: false
+    - command: /belldog-revoke-renamed
+      url: https://example.com/slash/
+      description: Revoke old token. Use this after channel name renamed.
+      usage_hint: <old channel name> <token>
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - channels:read
+      - chat:write
+      - chat:write.public
+      - commands
+      - groups:read
+      - groups:write
+      - chat:write.customize
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
