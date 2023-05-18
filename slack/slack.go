@@ -36,6 +36,13 @@ type OriginalSlashCommandRequest struct {
 	Text                string
 }
 
+// https://api.slack.com/methods/chat.postMessage#examples
+type slackPostMessageResponse struct {
+	Ok    bool
+	Error string
+	// Omit unnecessary fields
+}
+
 type Kit struct {
 	token string
 }
@@ -45,7 +52,7 @@ func NewKit(token string) Kit {
 }
 
 // https://api.slack.com/methods/chat.postMessage
-func (s Kit) PostMessage(ctx context.Context, channelID string, payload map[string]interface{}) error {
+func (s Kit) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) error {
 	payload["channel"] = channelID
 	jsonStr, err := json.Marshal(payload)
 	if err != nil {
@@ -67,11 +74,23 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, payload map[stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != statusCodeSuccess {
-		return fmt.Errorf("PostMessage failed with status code=%v", resp.StatusCode)
+		return fmt.Errorf("postMessage failed with status code=%v", resp.StatusCode)
 	}
 
-	if _, err := io.ReadAll(resp.Body); err != nil {
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return fmt.Errorf("reading response body in postMessage failed: %w", err)
+	}
+	res := slackPostMessageResponse{}
+	if err := json.Unmarshal(b, &res); err != nil {
+		return fmt.Errorf("unmarshalling Slack post messsage failed: %w", err)
+	}
+
+	if !res.Ok {
+		if res.Error == "channel_not_found" {
+			return fmt.Errorf("can not post messages in private channel in which the bot is not invited: channelName=%s, channelID=%s, reason=%s", channelName, channelID, res.Error)
+		}
+		return fmt.Errorf("slack PostMessage failed: channelName=%s, channelID=%s, reason=%s", channelName, channelID, res.Error)
 	}
 
 	return nil

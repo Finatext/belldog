@@ -59,6 +59,8 @@ Optional:
 - `CUSTOM_DOMAIN_NAME`: Custom domain name to be used to reach to Belldog instance. If omitted, host/authority HTTP field will be used.
 
 ### Slack permissions
+See `./example_app_manifest.yaml` to use Slack App Manifest.
+
 Posting messages:
 
 - `chat:write.public`: To post not-invited channels.
@@ -79,6 +81,8 @@ Optional:
 - `chat:write.customize`: Post message as other entities.
 
 ### Slack slash commands
+See `./example_app_manifest.yaml` to use Slack App Manifest.
+
 Endpoint is `<base_url>/slash/` (requires tail slash).
 
 - `/belldog-show`: "Show all tokens connected to this channel.", no hint
