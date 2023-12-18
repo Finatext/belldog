@@ -1,4 +1,4 @@
-name: lint
+name: int
 on: [pull_request]
 
 permissions:

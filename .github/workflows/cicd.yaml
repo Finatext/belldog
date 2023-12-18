@@ -1,7 +1,4 @@
-# refs:
-#   - https://docs.github.com/en/actions/publishing-packages/publishing-docker-images#publishing-images-to-github-packages
-#   - https://github.com/docker/metadata-action#semver
-name: Create and publish a Docker image
+name: cicd
 
 on:
   # By default, a workflow only runs when a pull_request event's activity type is opened, synchronize, or reopened.
@@ -38,6 +35,9 @@ jobs:
       - name: test
         run: go test -v ./...
 
+  # refs:
+  #   - https://docs.github.com/en/actions/publishing-packages/publishing-docker-images#publishing-images-to-github-packages
+  #   - https://github.com/docker/metadata-action#semver
   build-and-push-image:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
