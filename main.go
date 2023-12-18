@@ -25,11 +25,6 @@ var (
 func main() {
 	validateEnv()
 
-	x := false
-	if x == true {
-		fmt.Printf("x is true")
-	}
-
 	token, err := fetchParamter(paramSlackToken)
 	if err != nil {
 		log.Fatalf("fetchParamter failed: %s", err)
