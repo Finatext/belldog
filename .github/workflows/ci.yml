@@ -16,7 +16,8 @@ jobs:
         uses: reviewdog/action-golangci-lint@94d61e3205b61acf4ddabfeb13c5f8a13eb4167b # v2.5.0
         with:
           github_token: ${{ github.token }}
-          level: warning
+          level: error
+          fail_on_error: true
           reporter: github-pr-review
           tool_name: golangci-lint
           go_version_file: go.mod
