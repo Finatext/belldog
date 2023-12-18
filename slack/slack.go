@@ -169,7 +169,12 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 func (s *Kit) getChannelInfo(ctx context.Context, channelID string) (*slack.Channel, error) {
 	client := slack.New(s.token)
 
-	channel, err := client.GetConversationInfoContext(ctx, channelID, false)
+	input := slack.GetConversationInfoInput{
+		ChannelID:         channelID,
+		IncludeLocale:     false,
+		IncludeNumMembers: false,
+	}
+	channel, err := client.GetConversationInfoContext(ctx, &input)
 	if err != nil {
 		return nil, err
 	}

@@ -74,9 +74,10 @@ func fetchParamter(paramName string) (string, error) {
 		return "", fmt.Errorf("unable to load SDK config: %w", err)
 	}
 	client := ssm.NewFromConfig(cfg)
+	t := true
 	input := &ssm.GetParameterInput{
 		Name:           &paramName,
-		WithDecryption: true,
+		WithDecryption: &t,
 	}
 	res, err := client.GetParameter(ctx, input)
 	if err != nil {
