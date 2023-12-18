@@ -1,0 +1,35 @@
+name: ci
+on: [pull_request]
+
+permissions:
+  contents: read
+  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  pull-requests: write
+
+jobs:
+  lint:
+    name: Run lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: golangci-lint
+        uses: reviewdog/action-golangci-lint@94d61e3205b61acf4ddabfeb13c5f8a13eb4167b # v2.5.0
+        with:
+          github_token: ${{ github.token }}
+          level: error
+          fail_on_error: true
+          reporter: github-pr-review
+          tool_name: golangci-lint
+          go_version_file: go.mod
+  test:
+    name: Run test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: go build -v ./...
+      - name: test
+        run: go test -v ./...

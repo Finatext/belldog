@@ -114,3 +114,7 @@ main(proxy mode) -> domain -> storage
 main(batch mode) -> storage
   ↳ slack
 ```
+
+### Upgrade Go version
+- `go.mod`
+- `Dockerfile`
