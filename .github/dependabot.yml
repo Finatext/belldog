@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      # Avoid default day of week because of potential rush.
+      day: "tuesday"
+      time: "12:00"
+      timezone: "Asia/Tokyo"
+    # To avoid lock file conflicts, group all updates together.
+    groups:
+      gomod-all:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      # Avoid default day of week because of potential rush.
+      day: "tuesday"
+      time: "12:00"
+      timezone: "Asia/Tokyo"
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
