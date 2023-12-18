@@ -118,4 +118,3 @@ main(batch mode) -> storage
 ### Upgrade Go version
 - `go.mod`
 - `Dockerfile`
-- `.github/workflows/ci.yml`
