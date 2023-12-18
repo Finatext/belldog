@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   lint:
+    if: github.event.pull_request.draft == false
     name: Run lint
     runs-on: ubuntu-latest
     steps:
