@@ -10,5 +10,5 @@ COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -ldflags '-w -s' -o /usr/local/bin/app .
 
 FROM public.ecr.aws/lambda/provided:al2023
-COPY --from=build /usr/local/bin/app ${LAMBDA_TASK_ROOT}
-CMD ["app"]
+COPY --from=build /usr/local/bin/app .
+ENTRYPOINT ["./app"]
