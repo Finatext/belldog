@@ -39,7 +39,7 @@ jobs:
   #   - https://docs.github.com/en/actions/publishing-packages/publishing-docker-images#publishing-images-to-github-packages
   #   - https://github.com/docker/metadata-action#semver
   build-and-push-image:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request'
     needs:
       - test
     runs-on: ubuntu-latest
