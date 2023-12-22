@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/slack-go/slack"
 )
 
@@ -66,7 +67,17 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", s.token))
 	req.Header.Add("content-type", "application/json")
 
-	httpClient := &http.Client{}
+	// Default config values: https://github.com/hashicorp/go-retryablehttp/blob/v0.7.5/client.go#L429-L439
+	retryClient := retryablehttp.NewClient()
+	// Caller of Belldog expects to get response within about 5 seconds.
+	retryClient.RetryMax = 3
+	retryClient.RetryWaitMin = 500 * time.Millisecond
+	retryClient.RetryWaitMax = 5 * time.Second
+	// Default HTTP Client timeout covers from dialing (initiating TCP connection) to reading response body.
+	// https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts
+	retryClient.HTTPClient.Timeout = 1 * time.Second
+
+	httpClient := retryClient.StandardClient()
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("http request to slack API failed: %w", err)

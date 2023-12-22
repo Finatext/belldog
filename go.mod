@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.12.12
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.26.6
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.44.5
+	github.com/hashicorp/go-retryablehttp v0.7.5
 	github.com/slack-go/slack v0.12.3
 )
 
@@ -27,5 +28,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.5 // indirect
 	github.com/aws/smithy-go v1.19.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 )
