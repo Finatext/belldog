@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -23,17 +23,29 @@ var (
 )
 
 func main() {
+	ctx := context.Background()
+	// TODO: Set log level from env.
+	logLevel := new(slog.LevelVar)
+	ops := slog.HandlerOptions{
+		AddSource: true,
+		Level:     logLevel,
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
+	slog.SetDefault(logger)
+
 	validateEnv()
 
-	token, err := fetchParamter(paramSlackToken)
+	token, err := fetchParamter(ctx, paramSlackToken)
 	if err != nil {
-		log.Fatalf("fetchParamter failed: %s", err)
+		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	slackToken = token
 
-	secret, err := fetchParamter(paramSlackSigningSecret)
+	secret, err := fetchParamter(ctx, paramSlackSigningSecret)
 	if err != nil {
-		log.Fatalf("fetchParamter failed: %s", err)
+		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	slackSigningSecret = secret
 
@@ -43,7 +55,8 @@ func main() {
 	case "batch":
 		lambda.Start(handleCloudWatchEvent)
 	default:
-		log.Fatalf("Unknown `mode` env given: %s", mode)
+		slog.Error("Unknown `mode` env given", slog.String("mode", mode))
+		os.Exit(1)
 	}
 }
 
@@ -51,24 +64,28 @@ func validateEnv() {
 	// customDomainName can be empty.
 
 	if mode == "" {
-		log.Fatalf("Missing `MODE` env")
+		slog.Error("Missing `MODE` env")
+		os.Exit(1)
 	}
 	if opsNotificationChannelName == "" {
-		log.Fatalf("Missing `OPS_NOTIFICATION_CHANNEL_NAME` env")
+		slog.Error("Missing `OPS_NOTIFICATION_CHANNEL_NAME` env")
+		os.Exit(1)
 	}
 	if paramSlackSigningSecret == "" {
-		log.Fatalf("Missing `PARAMETER_NAME_SLACK_SIGNING_SECRET` env")
+		slog.Error("Missing `PARAMETER_NAME_SLACK_SIGNING_SECRET` env")
+		os.Exit(1)
 	}
 	if paramSlackToken == "" {
-		log.Fatalf("Missing `PARAMETER_NAME_SLACK_TOKEN` env")
+		slog.Error("Missing `PARAMETER_NAME_SLACK_TOKEN` env")
+		os.Exit(1)
 	}
 	if tableName == "" {
-		log.Fatalf("Missing `DDB_TABLE_NAME` env")
+		slog.Error("Missing `DDB_TABLE_NAME` env")
+		os.Exit(1)
 	}
 }
 
-func fetchParamter(paramName string) (string, error) {
-	ctx := context.Background()
+func fetchParamter(ctx context.Context, paramName string) (string, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to load SDK config: %w", err)
