@@ -20,13 +20,13 @@ type Config struct {
 
 // This doesn't follow go naming convention because it's used in envconfig.
 type EnvConfig struct {
-	CustomDomainName                string
-	DdbTableName                    string     `required:"true"`
-	LogLevel                        slog.Level `default:"info"`
-	Mode                            string     `required:"true"`
-	OpsNotificationChannelName      string     `required:"true"`
-	ParameterNameSlackSigningSecret string     `required:"true"`
-	ParameterNameSlackToken         string     `required:"true"`
+	CustomDomainName                string     `split_words:"true"`
+	DdbTableName                    string     `split_words:"true" required:"true"`
+	LogLevel                        slog.Level `split_words:"true" default:"info"`
+	Mode                            string     `split_words:"true" required:"true"`
+	OpsNotificationChannelName      string     `split_words:"true" required:"true"`
+	ParameterNameSlackSigningSecret string     `split_words:"true" required:"true"`
+	ParameterNameSlackToken         string     `split_words:"true" required:"true"`
 }
 
 var (
