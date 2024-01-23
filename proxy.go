@@ -99,12 +99,12 @@ func decodeBody(req request) ([]byte, error) {
 }
 
 func handleSlashCommand(ctx context.Context, req request, body []byte) (response, error) {
-	if !slack.VerifySlackRequest(slackSigningSecret, req.Headers, string(body)) {
+	if !slack.VerifySlackRequest(config.SlackSigningSecret, req.Headers, string(body)) {
 		return response{Body: "Bad request.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
 	// XXX: create object in initializing phase. Use handler struct pattern.
-	kit := slack.NewKit(slackToken)
+	kit := slack.NewKit(config.SlackToken)
 	cmdReq, err := kit.GetFullCommandRequest(ctx, string(body))
 	if err != nil {
 		return response{}, fmt.Errorf("kit.GetFullCommandRequest failed: %w", err)
@@ -113,7 +113,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 		return buildResponse("Belldog only supports public/private channels. If this is a private channel, invite Belldog.\n")
 	}
 
-	st, err := storage.NewStorage(ctx, tableName)
+	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
 		return response{}, fmt.Errorf("storage.NewStorage failed: %w", err)
 	}
@@ -145,7 +145,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 		return response{Body: "Invalid request path. Check tailing slash `/`.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	st, err := storage.NewStorage(ctx, tableName)
+	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
 		return response{}, fmt.Errorf("NewStorage failed: %w", err)
 	}
@@ -170,7 +170,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 		return response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	kit := slack.NewKit(slackToken)
+	kit := slack.NewKit(config.SlackToken)
 	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
 		return response{}, fmt.Errorf("PostMessage failed: %w", err)
 	}
@@ -346,8 +346,8 @@ func extractPayloadValue(body []byte) ([]byte, error) {
 }
 
 func buildWebhookURL(token string, channelName string, domainName string) string {
-	if customDomainName != "" {
-		domainName = customDomainName
+	if config.CustomDomainName != "" {
+		domainName = config.CustomDomainName
 	}
 	return fmt.Sprintf("https://%s/p/%s/%s/", domainName, channelName, token)
 }

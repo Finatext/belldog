@@ -7,24 +7,34 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/kelseyhightower/envconfig"
 )
 
+type Config struct {
+	EnvConfig
+	SlackSigningSecret string
+	SlackToken         string
+}
+
+// This doesn't follow go naming convention because it's used in envconfig.
+type EnvConfig struct {
+	CustomDomainName                string
+	DdbTableName                    string `required:"true"`
+	Mode                            string `required:"true"`
+	OpsNotificationChannelName      string `required:"true"`
+	ParameterNameSlackSigningSecret string `required:"true"`
+	ParameterNameSlackToken         string `required:"true"`
+}
+
 var (
-	customDomainName           = os.Getenv("CUSTOM_DOMAIN_NAME")
-	mode                       = os.Getenv("MODE")
-	opsNotificationChannelName = os.Getenv("OPS_NOTIFICATION_CHANNEL_NAME")
-	paramSlackSigningSecret    = os.Getenv("PARAMETER_NAME_SLACK_SIGNING_SECRET")
-	paramSlackToken            = os.Getenv("PARAMETER_NAME_SLACK_TOKEN")
-	slackSigningSecret         = "" // Setup later with SSM parameter store.
-	slackToken                 = "" // Setup later with SSM parameter store.
-	tableName                  = os.Getenv("DDB_TABLE_NAME")
+	config Config
 )
 
 func main() {
 	ctx := context.Background()
-	// TODO: Set log level from env.
+	// TODO: Set log level from env. Use UnmarshalText to parse string to Level.
 	logLevel := new(slog.LevelVar)
 	ops := slog.HandlerOptions{
 		AddSource: true,
@@ -33,60 +43,41 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
 	slog.SetDefault(logger)
 
-	validateEnv()
+	var c EnvConfig
+	err := envconfig.Process("", &c)
+	if err != nil {
+		slog.Error("parse env failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	config.EnvConfig = c
 
-	token, err := fetchParamter(ctx, paramSlackToken)
+	token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
 	if err != nil {
 		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	slackToken = token
+	config.SlackToken = token
 
-	secret, err := fetchParamter(ctx, paramSlackSigningSecret)
+	secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
 	if err != nil {
 		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	slackSigningSecret = secret
+	config.SlackSigningSecret = secret
 
-	switch mode {
+	switch config.Mode {
 	case "proxy":
 		lambda.Start(handleRequestWithCacheControl)
 	case "batch":
 		lambda.Start(handleCloudWatchEvent)
 	default:
-		slog.Error("Unknown `mode` env given", slog.String("mode", mode))
-		os.Exit(1)
-	}
-}
-
-func validateEnv() {
-	// customDomainName can be empty.
-
-	if mode == "" {
-		slog.Error("Missing `MODE` env")
-		os.Exit(1)
-	}
-	if opsNotificationChannelName == "" {
-		slog.Error("Missing `OPS_NOTIFICATION_CHANNEL_NAME` env")
-		os.Exit(1)
-	}
-	if paramSlackSigningSecret == "" {
-		slog.Error("Missing `PARAMETER_NAME_SLACK_SIGNING_SECRET` env")
-		os.Exit(1)
-	}
-	if paramSlackToken == "" {
-		slog.Error("Missing `PARAMETER_NAME_SLACK_TOKEN` env")
-		os.Exit(1)
-	}
-	if tableName == "" {
-		slog.Error("Missing `DDB_TABLE_NAME` env")
+		slog.Error("Unknown `mode` env given", slog.String("mode", config.Mode))
 		os.Exit(1)
 	}
 }
 
 func fetchParamter(ctx context.Context, paramName string) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to load SDK config: %w", err)
 	}
