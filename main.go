@@ -21,11 +21,12 @@ type Config struct {
 // This doesn't follow go naming convention because it's used in envconfig.
 type EnvConfig struct {
 	CustomDomainName                string
-	DdbTableName                    string `required:"true"`
-	Mode                            string `required:"true"`
-	OpsNotificationChannelName      string `required:"true"`
-	ParameterNameSlackSigningSecret string `required:"true"`
-	ParameterNameSlackToken         string `required:"true"`
+	DdbTableName                    string     `required:"true"`
+	LogLevel                        slog.Level `default:"info"`
+	Mode                            string     `required:"true"`
+	OpsNotificationChannelName      string     `required:"true"`
+	ParameterNameSlackSigningSecret string     `required:"true"`
+	ParameterNameSlackToken         string     `required:"true"`
 }
 
 var (
@@ -34,7 +35,6 @@ var (
 
 func main() {
 	ctx := context.Background()
-	// TODO: Set log level from env. Use UnmarshalText to parse string to Level.
 	logLevel := new(slog.LevelVar)
 	ops := slog.HandlerOptions{
 		AddSource: true,
@@ -50,6 +50,8 @@ func main() {
 		os.Exit(1)
 	}
 	config.EnvConfig = c
+
+	logLevel.Set(config.LogLevel)
 
 	token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
 	if err != nil {
