@@ -270,7 +270,7 @@ func processCmdRevokeRenamed(ctx context.Context, svc domain.Domain, cmdReq slac
 const correctMatchSize = 3
 
 // Define here to run regexp.MustCompilePOSIX once.
-var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/$`)
+var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/?$`)
 
 func parsePath(path string) (channelName string, token string, err error) {
 	res := pathRe.FindStringSubmatch(path)
