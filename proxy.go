@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"regexp"
@@ -25,10 +26,11 @@ const (
 	cmdRevoke        = "/belldog-revoke"
 	cmdRevokeRenamed = "/belldog-revoke-renamed"
 
-	statusCodeSuccess      = 200
-	statusCodeBadRequest   = 400
-	statusCodeUnauthorized = 401
-	statusCodeNotFound     = 404
+	statusCodeSuccess             = 200
+	statusCodeBadRequest          = 400
+	statusCodeUnauthorized        = 401
+	statusCodeNotFound            = 404
+	statusCodeInternalServerError = 500
 )
 
 type (
@@ -37,7 +39,7 @@ type (
 )
 
 func handleRequestWithCacheControl(ctx context.Context, req request) (response, error) {
-	res, err := handleRequest(ctx, req)
+	res, err := handleRequestWithAccessLogging(ctx, req)
 	if err != nil {
 		return res, err
 	}
@@ -45,6 +47,27 @@ func handleRequestWithCacheControl(ctx context.Context, req request) (response, 
 		res.Headers = make(map[string]string)
 	}
 	res.Headers["cache-control"] = "no-store, no-cache"
+	return res, err
+}
+
+func handleRequestWithAccessLogging(ctx context.Context, req request) (response, error) {
+	res, err := handleRequest(ctx, req)
+	statusCode := res.StatusCode
+	if statusCode == 0 {
+		statusCode = statusCodeInternalServerError
+	}
+	slog.InfoContext(
+		ctx,
+		"handleRequestWithAccessLogging",
+		slog.String("request_id", req.RequestContext.RequestID),
+		slog.String("method", req.RequestContext.HTTP.Method),
+		slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
+		slog.String("raw_path", maskToken(req.RawPath)),
+		slog.String("user_agent", req.RequestContext.HTTP.UserAgent),
+		slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
+		slog.String("protocol", req.RequestContext.HTTP.Protocol),
+		slog.Int("status_code", statusCode),
+	)
 	return res, err
 }
 
@@ -85,6 +108,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 		return response{Body: "Bad request.\n", StatusCode: statusCodeBadRequest}, nil
 	}
 
+	// XXX: create object in initializing phase. Use handler struct pattern.
 	kit := slack.NewKit(slackToken)
 	cmdReq, err := kit.GetFullCommandRequest(ctx, string(body))
 	if err != nil {
@@ -121,6 +145,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 func handleWebhook(ctx context.Context, req request, body []byte) (response, error) {
 	channelName, token, err := parsePath(req.RawPath)
 	if err != nil {
+		// TODO: Replace to slog.
 		fmt.Fprintf(os.Stderr, "Invalid request path given: %s\n", err)
 		return response{Body: "Invalid request path. Check tailing slash `/`.\n", StatusCode: statusCodeBadRequest}, nil
 	}
@@ -264,6 +289,15 @@ func parsePath(path string) (channelName string, token string, err error) {
 		return
 	}
 	return
+}
+
+func maskToken(path string) string {
+	res := pathRe.FindStringSubmatch(path)
+	if len(res) != correctMatchSize {
+		return path
+	}
+	masked := strings.Repeat("*", len(res[2]))
+	return fmt.Sprintf("/p/%s/%s/", res[1], masked)
 }
 
 // Lagacy Slack webhook accepts both of "application/json" and "application/x-www-form-urlencoded" contents.
