@@ -3,73 +3,83 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/kelseyhightower/envconfig"
 )
 
+type Config struct {
+	EnvConfig
+	SlackSigningSecret string
+	SlackToken         string
+}
+
+// This doesn't follow go naming convention because it's used in envconfig.
+type EnvConfig struct {
+	CustomDomainName                string     `split_words:"true"`
+	DdbTableName                    string     `split_words:"true" required:"true"`
+	LogLevel                        slog.Level `split_words:"true" default:"info"`
+	Mode                            string     `split_words:"true" required:"true"`
+	OpsNotificationChannelName      string     `split_words:"true" required:"true"`
+	ParameterNameSlackSigningSecret string     `split_words:"true" required:"true"`
+	ParameterNameSlackToken         string     `split_words:"true" required:"true"`
+}
+
 var (
-	customDomainName           = os.Getenv("CUSTOM_DOMAIN_NAME")
-	mode                       = os.Getenv("MODE")
-	opsNotificationChannelName = os.Getenv("OPS_NOTIFICATION_CHANNEL_NAME")
-	paramSlackSigningSecret    = os.Getenv("PARAMETER_NAME_SLACK_SIGNING_SECRET")
-	paramSlackToken            = os.Getenv("PARAMETER_NAME_SLACK_TOKEN")
-	slackSigningSecret         = "" // Setup later with SSM parameter store.
-	slackToken                 = "" // Setup later with SSM parameter store.
-	tableName                  = os.Getenv("DDB_TABLE_NAME")
+	config Config
 )
 
 func main() {
-	validateEnv()
-
-	token, err := fetchParamter(paramSlackToken)
-	if err != nil {
-		log.Fatalf("fetchParamter failed: %s", err)
+	ctx := context.Background()
+	logLevel := new(slog.LevelVar)
+	ops := slog.HandlerOptions{
+		AddSource: true,
+		Level:     logLevel,
 	}
-	slackToken = token
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
+	slog.SetDefault(logger)
 
-	secret, err := fetchParamter(paramSlackSigningSecret)
+	var c EnvConfig
+	err := envconfig.Process("", &c)
 	if err != nil {
-		log.Fatalf("fetchParamter failed: %s", err)
+		slog.Error("parse env failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
-	slackSigningSecret = secret
+	config.EnvConfig = c
 
-	switch mode {
+	logLevel.Set(config.LogLevel)
+
+	token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
+	if err != nil {
+		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	config.SlackToken = token
+
+	secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
+	if err != nil {
+		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	config.SlackSigningSecret = secret
+
+	switch config.Mode {
 	case "proxy":
 		lambda.Start(handleRequestWithCacheControl)
 	case "batch":
 		lambda.Start(handleCloudWatchEvent)
 	default:
-		log.Fatalf("Unknown `mode` env given: %s", mode)
+		slog.Error("Unknown `mode` env given", slog.String("mode", config.Mode))
+		os.Exit(1)
 	}
 }
 
-func validateEnv() {
-	// customDomainName can be empty.
-
-	if mode == "" {
-		log.Fatalf("Missing `MODE` env")
-	}
-	if opsNotificationChannelName == "" {
-		log.Fatalf("Missing `OPS_NOTIFICATION_CHANNEL_NAME` env")
-	}
-	if paramSlackSigningSecret == "" {
-		log.Fatalf("Missing `PARAMETER_NAME_SLACK_SIGNING_SECRET` env")
-	}
-	if paramSlackToken == "" {
-		log.Fatalf("Missing `PARAMETER_NAME_SLACK_TOKEN` env")
-	}
-	if tableName == "" {
-		log.Fatalf("Missing `DDB_TABLE_NAME` env")
-	}
-}
-
-func fetchParamter(paramName string) (string, error) {
-	ctx := context.Background()
-	cfg, err := config.LoadDefaultConfig(ctx)
+func fetchParamter(ctx context.Context, paramName string) (string, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to load SDK config: %w", err)
 	}

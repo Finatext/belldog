@@ -20,7 +20,7 @@ type renameEvent struct {
 func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 	ctx := context.Background()
 
-	st, err := storage.NewStorage(ctx, tableName)
+	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
 		return fmt.Errorf("storage.NewStorage failed: %w", err)
 	}
@@ -29,7 +29,7 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 		return fmt.Errorf("Storage.ScanAll failed: %w", err)
 	}
 
-	kit := slack.NewKit(slackToken)
+	kit := slack.NewKit(config.SlackToken)
 	channels, err := kit.GetAllChannels(ctx)
 	if err != nil {
 		return fmt.Errorf("slack.GetAllChannels failed: %w", err)
@@ -88,7 +88,7 @@ func notify(ctx context.Context, kit slack.Kit, channelID string, channelName st
 	}
 	payloadOps := map[string]interface{}{"text": msgOps}
 	// kit.PostMessage can accept channel name as channel id.
-	if err := kit.PostMessage(ctx, opsNotificationChannelName, opsNotificationChannelName, payloadOps); err != nil {
+	if err := kit.PostMessage(ctx, config.OpsNotificationChannelName, config.OpsNotificationChannelName, payloadOps); err != nil {
 		return fmt.Errorf("kit.PostMessage failed: %w", err)
 	}
 	return nil

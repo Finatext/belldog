@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -24,11 +26,6 @@ const (
 	cmdRegenerate    = "/belldog-regenerate"
 	cmdRevoke        = "/belldog-revoke"
 	cmdRevokeRenamed = "/belldog-revoke-renamed"
-
-	statusCodeSuccess      = 200
-	statusCodeBadRequest   = 400
-	statusCodeUnauthorized = 401
-	statusCodeNotFound     = 404
 )
 
 type (
@@ -37,7 +34,7 @@ type (
 )
 
 func handleRequestWithCacheControl(ctx context.Context, req request) (response, error) {
-	res, err := handleRequest(ctx, req)
+	res, err := handleRequestWithAccessLogging(ctx, req)
 	if err != nil {
 		return res, err
 	}
@@ -48,9 +45,30 @@ func handleRequestWithCacheControl(ctx context.Context, req request) (response, 
 	return res, err
 }
 
+func handleRequestWithAccessLogging(ctx context.Context, req request) (response, error) {
+	res, err := handleRequest(ctx, req)
+	statusCode := res.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusInternalServerError
+	}
+	slog.InfoContext(
+		ctx,
+		"handleRequestWithAccessLogging",
+		slog.String("request_id", req.RequestContext.RequestID),
+		slog.String("method", req.RequestContext.HTTP.Method),
+		slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
+		slog.String("raw_path", maskToken(req.RawPath)),
+		slog.String("user_agent", req.RequestContext.HTTP.UserAgent),
+		slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
+		slog.String("protocol", req.RequestContext.HTTP.Protocol),
+		slog.Int("status_code", statusCode),
+	)
+	return res, err
+}
+
 func handleRequest(ctx context.Context, req request) (response, error) {
 	if req.RequestContext.HTTP.Method != "POST" {
-		return response{Body: "Only POST method is supported.\n", StatusCode: statusCodeNotFound}, nil
+		return response{Body: "Only POST method is supported.\n", StatusCode: http.StatusNotFound}, nil
 	}
 	body, err := decodeBody(req)
 	if err != nil {
@@ -63,7 +81,7 @@ func handleRequest(ctx context.Context, req request) (response, error) {
 	case strings.HasPrefix(req.RawPath, "/p/"):
 		return handleWebhook(ctx, req, body)
 	default:
-		return response{Body: "Not found.\n", StatusCode: statusCodeNotFound}, nil
+		return response{Body: "Not found.\n", StatusCode: http.StatusNotFound}, nil
 	}
 }
 
@@ -81,11 +99,12 @@ func decodeBody(req request) ([]byte, error) {
 }
 
 func handleSlashCommand(ctx context.Context, req request, body []byte) (response, error) {
-	if !slack.VerifySlackRequest(slackSigningSecret, req.Headers, string(body)) {
-		return response{Body: "Bad request.\n", StatusCode: statusCodeBadRequest}, nil
+	if !slack.VerifySlackRequest(config.SlackSigningSecret, req.Headers, string(body)) {
+		return response{Body: "Bad request.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	kit := slack.NewKit(slackToken)
+	// XXX: create object in initializing phase. Use handler struct pattern.
+	kit := slack.NewKit(config.SlackToken)
 	cmdReq, err := kit.GetFullCommandRequest(ctx, string(body))
 	if err != nil {
 		return response{}, fmt.Errorf("kit.GetFullCommandRequest failed: %w", err)
@@ -94,7 +113,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 		return buildResponse("Belldog only supports public/private channels. If this is a private channel, invite Belldog.\n")
 	}
 
-	st, err := storage.NewStorage(ctx, tableName)
+	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
 		return response{}, fmt.Errorf("storage.NewStorage failed: %w", err)
 	}
@@ -121,11 +140,12 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 func handleWebhook(ctx context.Context, req request, body []byte) (response, error) {
 	channelName, token, err := parsePath(req.RawPath)
 	if err != nil {
+		// TODO: Replace to slog.
 		fmt.Fprintf(os.Stderr, "Invalid request path given: %s\n", err)
-		return response{Body: "Invalid request path. Check tailing slash `/`.\n", StatusCode: statusCodeBadRequest}, nil
+		return response{Body: "Invalid request path. Check tailing slash `/`.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	st, err := storage.NewStorage(ctx, tableName)
+	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
 		return response{}, fmt.Errorf("NewStorage failed: %w", err)
 	}
@@ -137,25 +157,25 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 	if res.NotFound {
 		fmt.Fprintf(os.Stderr, "channelName not found: %s\n", channelName)
 		msg := fmt.Sprintf("No token generated for %s, generate token with `%s` slash command.\n", channelName, cmdGenerate)
-		return response{Body: msg, StatusCode: statusCodeNotFound}, nil
+		return response{Body: msg, StatusCode: http.StatusNotFound}, nil
 	}
 	if res.Unmatch {
 		fmt.Fprintf(os.Stderr, "Invalid token given: %s\n", token)
-		return response{Body: "Invalid token given. Check generated URL.\n", StatusCode: statusCodeUnauthorized}, nil
+		return response{Body: "Invalid token given. Check generated URL.\n", StatusCode: http.StatusUnauthorized}, nil
 	}
 
 	payload, err := parseRequestBody(req, body)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parseRequestBody failed: %s, %s", err, body)
-		return response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: statusCodeBadRequest}, nil
+		return response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	kit := slack.NewKit(slackToken)
+	kit := slack.NewKit(config.SlackToken)
 	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
 		return response{}, fmt.Errorf("PostMessage failed: %w", err)
 	}
 
-	return response{Body: "ok.\n", StatusCode: statusCodeSuccess}, nil
+	return response{Body: "ok.\n", StatusCode: http.StatusOK}, nil
 }
 
 func processCmdShow(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest, req request) (response, error) {
@@ -250,7 +270,7 @@ func processCmdRevokeRenamed(ctx context.Context, svc domain.Domain, cmdReq slac
 const correctMatchSize = 3
 
 // Define here to run regexp.MustCompilePOSIX once.
-var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/$`)
+var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/?$`)
 
 func parsePath(path string) (channelName string, token string, err error) {
 	res := pathRe.FindStringSubmatch(path)
@@ -264,6 +284,15 @@ func parsePath(path string) (channelName string, token string, err error) {
 		return
 	}
 	return
+}
+
+func maskToken(path string) string {
+	res := pathRe.FindStringSubmatch(path)
+	if len(res) != correctMatchSize {
+		return path
+	}
+	masked := strings.Repeat("*", len(res[2]))
+	return fmt.Sprintf("/p/%s/%s/", res[1], masked)
 }
 
 // Lagacy Slack webhook accepts both of "application/json" and "application/x-www-form-urlencoded" contents.
@@ -317,8 +346,8 @@ func extractPayloadValue(body []byte) ([]byte, error) {
 }
 
 func buildWebhookURL(token string, channelName string, domainName string) string {
-	if customDomainName != "" {
-		domainName = customDomainName
+	if config.CustomDomainName != "" {
+		domainName = config.CustomDomainName
 	}
 	return fmt.Sprintf("https://%s/p/%s/%s/", domainName, channelName, token)
 }
@@ -333,5 +362,5 @@ func buildResponse(msg string) (response, error) {
 	if err != nil {
 		return response{}, fmt.Errorf("json.Marshal failed: %w", err)
 	}
-	return response{Body: string(body), StatusCode: statusCodeSuccess}, nil
+	return response{Body: string(body), StatusCode: http.StatusOK}, nil
 }
