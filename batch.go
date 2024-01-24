@@ -30,7 +30,7 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 		return fmt.Errorf("Storage.ScanAll failed: %w", err)
 	}
 
-	kit := slack.NewKit(config.SlackToken)
+	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
 	channels, err := kit.GetAllChannels(ctx)
 	if err != nil {
 		return fmt.Errorf("slack.GetAllChannels failed: %w", err)

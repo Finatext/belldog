@@ -103,7 +103,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 	}
 
 	// XXX: create object in initializing phase. Use handler struct pattern.
-	kit := slack.NewKit(config.SlackToken)
+	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
 	cmdReq, err := kit.GetFullCommandRequest(ctx, string(body))
 	if err != nil {
 		return response{}, fmt.Errorf("kit.GetFullCommandRequest failed: %w", err)
@@ -170,7 +170,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 		return response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
-	kit := slack.NewKit(config.SlackToken)
+	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
 	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
 		slog.ErrorContext(ctx, "PostMessage failed",
 			slog.String("error", err.Error()),

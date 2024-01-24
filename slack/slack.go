@@ -24,6 +24,14 @@ const (
 	statusCodeSuccess           = 200
 )
 
+type RetryConfig struct {
+	Max     int
+	WaitMin time.Duration
+	WaitMax time.Duration
+	// Includes TCP connection establishment, TLS handshake, send HTTP request, read response body.
+	ReadTimeout time.Duration
+}
+
 type SlashCommandRequest struct {
 	OriginalSlashCommandRequest
 	ChannelName string
@@ -45,11 +53,20 @@ type slackPostMessageResponse struct {
 }
 
 type Kit struct {
-	token string
+	token      string
+	httpClient *http.Client
 }
 
-func NewKit(token string) Kit {
-	return Kit{token: token}
+func NewKit(token string, config RetryConfig) Kit {
+	// Default config values: https://github.com/hashicorp/go-retryablehttp/blob/v0.7.5/client.go#L429-L439
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = config.Max
+	retryClient.RetryWaitMin = config.WaitMin
+	retryClient.RetryWaitMax = config.WaitMax
+	retryClient.HTTPClient.Timeout = config.ReadTimeout
+
+	httpClient := retryClient.StandardClient()
+	return Kit{token: token, httpClient: httpClient}
 }
 
 // https://api.slack.com/methods/chat.postMessage
@@ -67,19 +84,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", s.token))
 	req.Header.Add("content-type", "application/json")
 
-	// Default config values: https://github.com/hashicorp/go-retryablehttp/blob/v0.7.5/client.go#L429-L439
-	retryClient := retryablehttp.NewClient()
-	// Caller of Belldog expects to get response within about 5 seconds.
-	retryClient.RetryMax = 3
-	retryClient.RetryWaitMin = 500 * time.Millisecond
-	retryClient.RetryWaitMax = 5 * time.Second
-	// Default HTTP Client timeout covers from dialing (initiating TCP connection) to reading response body.
-	// https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts
-	retryClient.HTTPClient.Timeout = 1 * time.Second
-	retryClient.Logger = slog.Default()
-
-	httpClient := retryClient.StandardClient()
-	resp, err := httpClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("http request to slack API failed: %w", err)
 	}
