@@ -52,7 +52,7 @@ func handleRequestWithAccessLogging(ctx context.Context, req request) (response,
 	}
 	slog.InfoContext(
 		ctx,
-		"handleRequestWithAccessLogging",
+		"access_log",
 		slog.String("request_id", req.RequestContext.RequestID),
 		slog.String("method", req.RequestContext.HTTP.Method),
 		slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
