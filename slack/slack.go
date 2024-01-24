@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +76,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	// Default HTTP Client timeout covers from dialing (initiating TCP connection) to reading response body.
 	// https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts
 	retryClient.HTTPClient.Timeout = 1 * time.Second
+	retryClient.Logger = slog.Default()
 
 	httpClient := retryClient.StandardClient()
 	resp, err := httpClient.Do(req)
@@ -201,26 +202,27 @@ const (
 )
 
 // https://api.slack.com/authentication/verifying-requests-from-slack
-func VerifySlackRequest(key string, headers map[string]string, body string) bool {
+func VerifySlackRequest(ctx context.Context, key string, headers map[string]string, body string) bool {
 	givenSig, ok := headers["x-slack-signature"]
 	if !ok {
-		fmt.Fprint(os.Stderr, "missing x-slack-signature header.\n")
+		slog.InfoContext(ctx, "missing x-slack-signature header")
 		return false
 	}
 
 	timestampStr, ok := headers["x-slack-request-timestamp"]
 	if !ok {
-		fmt.Fprint(os.Stderr, "missing x-slack-request-timestamp.\n")
+		slog.InfoContext(ctx, "missing x-slack-request-timestamp header")
 		return false
 	}
 	timestamp, err := strconv.ParseInt(timestampStr, base, bitSize)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse timestamp: %s\n", err)
+		slog.InfoContext(ctx, "failed to parse timestamp", slog.String("error", err.Error()), slog.String("timestamp", timestampStr))
 		return false
 	}
 	now := time.Now().UTC().Unix()
-	if abs(now-timestamp) > 60*5 {
-		fmt.Fprintf(os.Stderr, "expired timestamp given: %v", timestamp)
+	diff := abs(now - timestamp)
+	if diff > 60*5 {
+		slog.InfoContext(ctx, "expired timestamp given", slog.Int64("now", now), slog.Int64("timestamp", timestamp), slog.Int64("diff", diff))
 		return false
 	}
 
@@ -232,7 +234,7 @@ func VerifySlackRequest(key string, headers map[string]string, body string) bool
 	formatted := signaturePrefix + computed
 	ret := hmac.Equal([]byte(givenSig), []byte(formatted))
 	if !ret {
-		fmt.Fprintf(os.Stderr, "verify failed, givenSig=%s, formatted=%s\n", givenSig, formatted)
+		slog.InfoContext(ctx, "verify failed", slog.String("givenSig", givenSig), slog.String("formatted", formatted))
 		return false
 	}
 	return ret
