@@ -61,6 +61,7 @@ func handleRequestWithAccessLogging(ctx context.Context, req request) (response,
 		slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
 		slog.String("protocol", req.RequestContext.HTTP.Protocol),
 		slog.Int("status_code", statusCode),
+		slog.Int("req_body_size", len(req.Body)),
 	)
 	return res, err
 }
