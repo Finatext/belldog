@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Finatext/belldog/slack"
 	"github.com/Finatext/belldog/storage"
@@ -38,7 +39,7 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 	migrations := make(map[string]storage.Record)
 	var renames []renameEvent
 
-	fmt.Printf("target records size: %v\n", len(recs))
+	slog.InfoContext(ctx, "target record size", slog.Int("size", len(recs)))
 	for _, rec := range recs {
 		name := rec.ChannelName
 		// Check token is in migration.
@@ -56,15 +57,20 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 	}
 
 	for _, rec := range migrations {
+		slog.InfoContext(ctx, "Token is in migration", slog.String("channel_name", rec.ChannelName), slog.String("channel_id", rec.ChannelID))
 		msgOps := fmt.Sprintf("Token is in migration: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
-		fmt.Print(msgOps)
 		msg := fmt.Sprintf("Token is in migration. Once all old webhook URLs are replaced, revoke old token: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
 		if err := notify(ctx, kit, rec.ChannelID, rec.ChannelName, msg, msgOps); err != nil {
 			return fmt.Errorf("notify failed: %w", err)
 		}
 	}
 	for _, evt := range renames {
-		fmt.Printf("Channel name and channel id pair updated: channel_id=%s, old_channel_name=%s, renamed_channel_name=%s, saved_token=%s\n", evt.channelID, evt.oldName, evt.newName, evt.savedToken)
+		slog.InfoContext(ctx, "Channel name and channel id pair updated",
+			slog.String("channel_id", evt.channelID),
+			slog.String("old_channel_name", evt.oldName),
+			slog.String("renamed_channel_name", evt.newName),
+			slog.String("saved_token", evt.savedToken),
+		)
 		msgOps := fmt.Sprintf("Channel name and channel id pair updated: channel_id=%s, old_channel_name=%s, renamed_channel_name=%s\n", evt.channelID, evt.oldName, evt.newName)
 		format := `
 Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, renamed_channel_name=%s

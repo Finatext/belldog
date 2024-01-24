@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -99,7 +98,7 @@ func decodeBody(req request) ([]byte, error) {
 }
 
 func handleSlashCommand(ctx context.Context, req request, body []byte) (response, error) {
-	if !slack.VerifySlackRequest(config.SlackSigningSecret, req.Headers, string(body)) {
+	if !slack.VerifySlackRequest(ctx, config.SlackSigningSecret, req.Headers, string(body)) {
 		return response{Body: "Bad request.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
@@ -109,6 +108,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 	if err != nil {
 		return response{}, fmt.Errorf("kit.GetFullCommandRequest failed: %w", err)
 	}
+	logCommandRequest(ctx, cmdReq)
 	if !cmdReq.Supported {
 		return buildResponse("Belldog only supports public/private channels. If this is a private channel, invite Belldog.\n")
 	}
@@ -119,7 +119,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 	}
 
 	svc := domain.NewDomain(st)
-	fmt.Printf("command %s given: cmdReq=%v\n", cmdReq.Command, cmdReq)
+
 	// https://api.slack.com/interactivity/slash-commands#creating_commands
 	switch cmdReq.Command {
 	case cmdShow:
@@ -133,6 +133,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 	case cmdRevokeRenamed:
 		return processCmdRevokeRenamed(ctx, svc, cmdReq)
 	default:
+		slog.InfoContext(ctx, "missing command given", slog.String("command", cmdReq.Command))
 		return buildResponse("Missing command.\n")
 	}
 }
@@ -140,9 +141,8 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 func handleWebhook(ctx context.Context, req request, body []byte) (response, error) {
 	channelName, token, err := parsePath(req.RawPath)
 	if err != nil {
-		// TODO: Replace to slog.
-		fmt.Fprintf(os.Stderr, "Invalid request path given: %s\n", err)
-		return response{Body: "Invalid request path. Check tailing slash `/`.\n", StatusCode: http.StatusBadRequest}, nil
+		slog.InfoContext(ctx, "Invalid request path given, response bad request", slog.String("error", err.Error()))
+		return response{Body: "Invalid request path\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
 	st, err := storage.NewStorage(ctx, config.DdbTableName)
@@ -155,23 +155,30 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 		return response{}, fmt.Errorf("VerifyToken failed: %w", err)
 	}
 	if res.NotFound {
-		fmt.Fprintf(os.Stderr, "channelName not found: %s\n", channelName)
+		slog.InfoContext(ctx, "No token generated, response not found", slog.String("channel_name", channelName))
 		msg := fmt.Sprintf("No token generated for %s, generate token with `%s` slash command.\n", channelName, cmdGenerate)
 		return response{Body: msg, StatusCode: http.StatusNotFound}, nil
 	}
 	if res.Unmatch {
-		fmt.Fprintf(os.Stderr, "Invalid token given: %s\n", token)
+		slog.InfoContext(ctx, "Invalid token given, response unauthorized", slog.String("channel_name", channelName), slog.String("token", token))
 		return response{Body: "Invalid token given. Check generated URL.\n", StatusCode: http.StatusUnauthorized}, nil
 	}
 
 	payload, err := parseRequestBody(req, body)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parseRequestBody failed: %s, %s", err, body)
+		slog.InfoContext(ctx, "parseRequestBody failed, response bad request", slog.String("error", err.Error()), slog.String("body", string(body)))
 		return response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: http.StatusBadRequest}, nil
 	}
 
 	kit := slack.NewKit(config.SlackToken)
 	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
+		slog.ErrorContext(ctx, "PostMessage failed",
+			slog.String("error", err.Error()),
+			slog.String("channel_id", res.ChannelID),
+			slog.String("channel_name", res.ChannelName),
+			slog.Int("body size", len(body)),
+		)
+		slog.DebugContext(ctx, "debug PostMessage failed", slog.String("body", string(body)))
 		return response{}, fmt.Errorf("PostMessage failed: %w", err)
 	}
 
@@ -363,4 +370,15 @@ func buildResponse(msg string) (response, error) {
 		return response{}, fmt.Errorf("json.Marshal failed: %w", err)
 	}
 	return response{Body: string(body), StatusCode: http.StatusOK}, nil
+}
+
+func logCommandRequest(ctx context.Context, cmdReq slack.SlashCommandRequest) {
+	slog.InfoContext(ctx, "command given",
+		slog.String("command", cmdReq.Command),
+		slog.String("channel_id", cmdReq.ChannelID),
+		slog.String("channel_name", cmdReq.ChannelName),
+		slog.String("original_channel_name", cmdReq.OriginalChannelName),
+		slog.String("text", cmdReq.Text),
+		slog.Bool("supported", cmdReq.Supported),
+	)
 }
