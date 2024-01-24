@@ -76,6 +76,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	// Default HTTP Client timeout covers from dialing (initiating TCP connection) to reading response body.
 	// https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts
 	retryClient.HTTPClient.Timeout = 1 * time.Second
+	retryClient.Logger = slog.Default()
 
 	httpClient := retryClient.StandardClient()
 	resp, err := httpClient.Do(req)
