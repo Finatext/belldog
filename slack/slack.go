@@ -64,6 +64,7 @@ func NewKit(token string, config RetryConfig) Kit {
 	retryClient.RetryWaitMin = config.WaitMin
 	retryClient.RetryWaitMax = config.WaitMax
 	retryClient.HTTPClient.Timeout = config.ReadTimeout
+	retryClient.Logger = slog.Default()
 
 	httpClient := retryClient.StandardClient()
 	return Kit{token: token, httpClient: httpClient}
