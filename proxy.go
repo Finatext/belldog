@@ -172,7 +172,8 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 	}
 
 	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
-	if err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload); err != nil {
+	result, err := kit.PostMessage(ctx, res.ChannelID, res.ChannelName, payload)
+	if err != nil {
 		slog.ErrorContext(ctx, "PostMessage failed",
 			slog.String("error", err.Error()),
 			slog.String("channel_id", res.ChannelID),
@@ -183,7 +184,47 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 		return response{}, fmt.Errorf("PostMessage failed: %w", err)
 	}
 
-	return response{Body: "ok.\n", StatusCode: http.StatusOK}, nil
+	switch result.Type {
+	case slack.PostMessageResultOK:
+		slog.InfoContext(ctx, "PostMessage succeeded",
+			slog.String("channel_id", res.ChannelID),
+			slog.String("channel_name", res.ChannelName),
+		)
+		return response{Body: "ok.\n", StatusCode: http.StatusOK}, nil
+	case slack.PostMessageResultServerTimeoutFailure:
+		slog.WarnContext(ctx, "PostMessage timeout",
+			slog.String("channel_id", res.ChannelID),
+			slog.String("channel_name", res.ChannelName),
+		)
+		return response{Body: "Slack API timeout.\n", StatusCode: http.StatusGatewayTimeout}, nil
+	case slack.PostMessageResultServerFailure:
+		msg := fmt.Sprintf("Slack API error: status=%d, body=%s\n", result.StatusCode, result.Body)
+		if result.StatusCode >= 500 && result.StatusCode < 600 {
+			slog.WarnContext(ctx, "PostMessage server error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
+			return response{Body: msg, StatusCode: http.StatusBadGateway}, nil
+		} else if result.StatusCode >= 400 && result.StatusCode < 500 {
+			slog.InfoContext(ctx, "PostMessage client error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
+			return response{Body: msg, StatusCode: result.StatusCode}, nil
+		} else {
+			return response{}, fmt.Errorf("unexpected status code from Slack API: code=%d, body=%s", result.StatusCode, result.Body)
+		}
+	case slack.PostMessageResultDomainFailure:
+		if result.Reason == "channel_not_found" {
+			msg := fmt.Sprintf("invite bot to the channel: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
+			return response{Body: msg, StatusCode: http.StatusBadRequest}, nil
+		} else {
+			slog.ErrorContext(ctx, "PostMessage domain failure",
+				slog.String("channel_id", res.ChannelID),
+				slog.String("channel_name", res.ChannelName),
+				slog.String("reason", result.Reason),
+			)
+			msg := fmt.Sprintf("Slack API responses error: reason=%s", result.Reason)
+			return response{Body: msg, StatusCode: http.StatusBadRequest}, nil
+		}
+	// Check this in lint phase, not in runtime.
+	default:
+		return response{}, fmt.Errorf("unexpected PostMessageResult type: %v", result.Type)
+	}
 }
 
 func processCmdShow(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest, req request) (response, error) {

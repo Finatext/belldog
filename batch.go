@@ -89,13 +89,38 @@ Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, re
 
 func notify(ctx context.Context, kit slack.Kit, channelID string, channelName string, msg string, msgOps string) error {
 	payload := map[string]interface{}{"text": msg}
-	if err := kit.PostMessage(ctx, channelID, channelName, payload); err != nil {
-		return fmt.Errorf("kit.PostMessage failed: %w", err)
+	{
+		result, err := kit.PostMessage(ctx, channelID, channelName, payload)
+		if err != nil {
+			return fmt.Errorf("kit.PostMessage failed: %w", err)
+		}
+		if e := handlePostMessageFailure(result); e != nil {
+			return e
+		}
 	}
 	payloadOps := map[string]interface{}{"text": msgOps}
 	// kit.PostMessage can accept channel name as channel id.
-	if err := kit.PostMessage(ctx, config.OpsNotificationChannelName, config.OpsNotificationChannelName, payloadOps); err != nil {
+	result, err := kit.PostMessage(ctx, config.OpsNotificationChannelName, config.OpsNotificationChannelName, payloadOps)
+	if err != nil {
 		return fmt.Errorf("kit.PostMessage failed: %w", err)
 	}
+	if e := handlePostMessageFailure(result); e != nil {
+		return e
+	}
 	return nil
+}
+
+func handlePostMessageFailure(result slack.PostMessageResult) error {
+	switch result.Type {
+	case slack.PostMessageResultOK:
+		return nil
+	case slack.PostMessageResultServerTimeoutFailure:
+		return fmt.Errorf("slack server timeout")
+	case slack.PostMessageResultServerFailure:
+		return fmt.Errorf("slack server error: code=%d, body=%s", result.StatusCode, result.Body)
+	case slack.PostMessageResultDomainFailure:
+		return fmt.Errorf("slack domain error: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
+	default:
+		return fmt.Errorf("unknown PostMessageResult type: %d", result.Type)
+	}
 }
