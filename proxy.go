@@ -380,6 +380,7 @@ func extractPayloadValue(body []byte) ([]byte, error) {
 	// url.ParseQuery fails when parsing invalid semicolon separators or escapes.
 	if err != nil {
 		// Fallback to parse as raw JSON.
+		//nolint:nilerr
 		return body, nil
 	}
 	v, ok := vs["payload"]

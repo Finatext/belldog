@@ -87,8 +87,8 @@ func NewKit(token string, config RetryConfig) Kit {
 
 // https://api.slack.com/methods/chat.postMessage#examples
 type slackPostMessageResponse struct {
-	Ok    bool
-	Error string
+	Ok    bool   `json:"ok"`
+	Error string `json:"error"`
 	// Omit unnecessary fields
 }
 
@@ -199,14 +199,13 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 	channel, err := s.getChannelInfo(ctx, cmdReq.ChannelID)
 	if err != nil {
 		// Belldog doesn't have permissions to read the conversation info.
-		if serr, ok := err.(slack.SlackErrorResponse); ok {
-			if serr.Error() == "channel_not_found" {
-				return SlashCommandRequest{
-					OriginalSlashCommandRequest: cmdReq,
-					ChannelName:                 cmdReq.OriginalChannelName,
-					Supported:                   false,
-				}, nil
-			}
+		var serr *slack.SlackErrorResponse
+		if errors.As(err, &serr) && serr.Error() == "channel_not_found" {
+			return SlashCommandRequest{
+				OriginalSlashCommandRequest: cmdReq,
+				ChannelName:                 cmdReq.OriginalChannelName,
+				Supported:                   false,
+			}, nil
 		}
 		return SlashCommandRequest{}, fmt.Errorf("failed to call conversations.info API: %w", err)
 	}
