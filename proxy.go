@@ -213,7 +213,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 			msg := fmt.Sprintf("invite bot to the channel: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
 			return response{Body: msg, StatusCode: http.StatusBadRequest}, nil
 		} else {
-			slog.ErrorContext(ctx, "PostMessage domain failure",
+			slog.WarnContext(ctx, "PostMessage Slack API responses error response",
 				slog.String("channel_id", res.ChannelID),
 				slog.String("channel_name", res.ChannelName),
 				slog.String("reason", result.Reason),
