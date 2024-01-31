@@ -172,6 +172,16 @@ func (s *Kit) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 		}
 		chans, next, err := client.GetConversationsContext(ctx, &param)
 		if err != nil {
+			var e *slack.RateLimitedError
+			if errors.As(err, &e) && e.Retryable() {
+				select {
+				case <-ctx.Done():
+					err = ctx.Err()
+				case <-time.After(e.RetryAfter):
+					err = nil
+					continue
+				}
+			}
 			return nil, fmt.Errorf("slack-go GetConversationsContext failed: %w", err)
 		}
 
