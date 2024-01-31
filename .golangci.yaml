@@ -1,3 +1,6 @@
+linters:
+  presets:
+    - bugs
 linters-settings:
   varnamelen:
     ignore-map-index-ok: true

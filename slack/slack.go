@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -45,12 +46,26 @@ type OriginalSlashCommandRequest struct {
 	Text                string
 }
 
-// https://api.slack.com/methods/chat.postMessage#examples
-type slackPostMessageResponse struct {
-	Ok    bool
-	Error string
-	// Omit unnecessary fields
+// Pack all neccessary fields into one struct to work-around no enum.
+type PostMessageResult struct {
+	Type PostMessageResultType
+	// Only when Type is ServerFailure
+	StatusCode int
+	Body       string
+	// Only when Type is DomainFailure
+	Reason      string
+	ChannelID   string
+	ChannelName string
 }
+
+type PostMessageResultType int
+
+const (
+	PostMessageResultOK PostMessageResultType = iota
+	PostMessageResultServerTimeoutFailure
+	PostMessageResultServerFailure
+	PostMessageResultDomainFailure
+)
 
 type Kit struct {
 	token      string
@@ -70,48 +85,67 @@ func NewKit(token string, config RetryConfig) Kit {
 	return Kit{token: token, httpClient: httpClient}
 }
 
+// https://api.slack.com/methods/chat.postMessage#examples
+type slackPostMessageResponse struct {
+	Ok    bool   `json:"ok"`
+	Error string `json:"error"`
+	// Omit unnecessary fields
+}
+
 // https://api.slack.com/methods/chat.postMessage
-func (s Kit) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) error {
+func (s Kit) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) (PostMessageResult, error) {
 	payload["channel"] = channelID
 	jsonStr, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("json marshaling payload failed: %w", err)
+		return PostMessageResult{}, fmt.Errorf("json marshaling payload failed: %w", err)
 	}
 	body := strings.NewReader(string(jsonStr))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackAPIPostMessageEndpoint, body)
 	if err != nil {
-		return fmt.Errorf("http.NewRequestWithContext failed: %w", err)
+		return PostMessageResult{}, fmt.Errorf("http.NewRequestWithContext failed: %w", err)
 	}
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", s.token))
 	req.Header.Add("content-type", "application/json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("http request to slack API failed: %w", err)
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) && urlErr.Timeout() {
+			slog.InfoContext(ctx, "Slack API timeout", slog.String("error", err.Error()))
+			return PostMessageResult{Type: PostMessageResultServerTimeoutFailure}, nil
+		}
+		// If err is not due to timeout, it's unexpected error.
+		return PostMessageResult{}, fmt.Errorf("http request to slack API failed: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != statusCodeSuccess {
-		return fmt.Errorf("postMessage failed with status code=%v", resp.StatusCode)
-	}
-
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("reading response body in postMessage failed: %w", err)
+		return PostMessageResult{}, fmt.Errorf("reading response body in postMessage failed: %w", err)
 	}
+
+	if resp.StatusCode != statusCodeSuccess {
+		return PostMessageResult{
+			Type:       PostMessageResultServerFailure,
+			StatusCode: resp.StatusCode,
+			Body:       string(b),
+		}, nil
+	}
+
 	res := slackPostMessageResponse{}
 	if err := json.Unmarshal(b, &res); err != nil {
-		return fmt.Errorf("unmarshalling Slack post messsage failed: %w", err)
+		return PostMessageResult{}, fmt.Errorf("unmarshalling Slack post messsage failed: %w", err)
 	}
 
 	if !res.Ok {
-		if res.Error == "channel_not_found" {
-			return fmt.Errorf("can not post messages in private channel in which the bot is not invited: channelName=%s, channelID=%s, reason=%s", channelName, channelID, res.Error)
-		}
-		return fmt.Errorf("slack PostMessage failed: channelName=%s, channelID=%s, reason=%s", channelName, channelID, res.Error)
+		return PostMessageResult{
+			Type:        PostMessageResultDomainFailure,
+			Reason:      res.Error,
+			ChannelID:   channelID,
+			ChannelName: channelName,
+		}, nil
 	}
 
-	return nil
+	return PostMessageResult{Type: PostMessageResultOK}, nil
 }
 
 const slackPaginationLimit = 200
@@ -165,14 +199,13 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 	channel, err := s.getChannelInfo(ctx, cmdReq.ChannelID)
 	if err != nil {
 		// Belldog doesn't have permissions to read the conversation info.
-		if serr, ok := err.(slack.SlackErrorResponse); ok {
-			if serr.Error() == "channel_not_found" {
-				return SlashCommandRequest{
-					OriginalSlashCommandRequest: cmdReq,
-					ChannelName:                 cmdReq.OriginalChannelName,
-					Supported:                   false,
-				}, nil
-			}
+		var serr *slack.SlackErrorResponse
+		if errors.As(err, &serr) && serr.Error() == "channel_not_found" {
+			return SlashCommandRequest{
+				OriginalSlashCommandRequest: cmdReq,
+				ChannelName:                 cmdReq.OriginalChannelName,
+				Supported:                   false,
+			}, nil
 		}
 		return SlashCommandRequest{}, fmt.Errorf("failed to call conversations.info API: %w", err)
 	}
