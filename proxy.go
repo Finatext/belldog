@@ -46,23 +46,32 @@ func handleRequestWithCacheControl(ctx context.Context, req request) (response, 
 
 func handleRequestWithAccessLogging(ctx context.Context, req request) (response, error) {
 	res, err := handleRequest(ctx, req)
-	statusCode := res.StatusCode
-	if statusCode == 0 {
-		statusCode = http.StatusInternalServerError
+	if err != nil {
+		slog.ErrorContext(ctx, "access_log",
+			slog.String("request_id", req.RequestContext.RequestID),
+			slog.String("method", req.RequestContext.HTTP.Method),
+			slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
+			slog.String("raw_path", maskToken(req.RawPath)),
+			slog.String("user_agent", req.RequestContext.HTTP.UserAgent),
+			slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
+			slog.String("protocol", req.RequestContext.HTTP.Protocol),
+			slog.Int("req_body_size", len(req.Body)),
+		)
+		slog.ErrorContext(ctx, "handleRequest failed", slog.String("error", err.Error()))
+	} else {
+		slog.InfoContext(
+			ctx, "access_log",
+			slog.String("request_id", req.RequestContext.RequestID),
+			slog.String("method", req.RequestContext.HTTP.Method),
+			slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
+			slog.String("raw_path", maskToken(req.RawPath)),
+			slog.String("user_agent", req.RequestContext.HTTP.UserAgent),
+			slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
+			slog.String("protocol", req.RequestContext.HTTP.Protocol),
+			slog.Int("status_code", res.StatusCode),
+			slog.Int("req_body_size", len(req.Body)),
+		)
 	}
-	slog.InfoContext(
-		ctx,
-		"access_log",
-		slog.String("request_id", req.RequestContext.RequestID),
-		slog.String("method", req.RequestContext.HTTP.Method),
-		slog.String("path", maskToken(req.RequestContext.HTTP.Path)),
-		slog.String("raw_path", maskToken(req.RawPath)),
-		slog.String("user_agent", req.RequestContext.HTTP.UserAgent),
-		slog.String("source_ip", req.RequestContext.HTTP.SourceIP),
-		slog.String("protocol", req.RequestContext.HTTP.Protocol),
-		slog.Int("status_code", statusCode),
-		slog.Int("req_body_size", len(req.Body)),
-	)
 	return res, err
 }
 

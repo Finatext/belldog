@@ -209,8 +209,11 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 	channel, err := s.getChannelInfo(ctx, cmdReq.ChannelID)
 	if err != nil {
 		// Belldog doesn't have permissions to read the conversation info.
-		var serr *slack.SlackErrorResponse
-		if errors.As(err, &serr) && serr.Error() == "channel_not_found" {
+		//
+		// XXX: underlying func (*slack.Client).GetConversationInfoContext() returns error
+		// as concrete struct type not as pointer. So non-pointer type sigunature is correct as of now.
+		var serr slack.SlackErrorResponse
+		if errors.As(err, &serr) && serr.Err == "channel_not_found" {
 			return SlashCommandRequest{
 				OriginalSlashCommandRequest: cmdReq,
 				ChannelName:                 cmdReq.OriginalChannelName,
