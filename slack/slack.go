@@ -78,6 +78,7 @@ func NewKit(token string, config RetryConfig) Kit {
 	retryClient.RetryMax = config.Max
 	retryClient.RetryWaitMin = config.WaitMin
 	retryClient.RetryWaitMax = config.WaitMax
+	retryClient.ErrorHandler = returnResponseHandler
 	retryClient.HTTPClient.Timeout = config.ReadTimeout
 	retryClient.Logger = slog.Default()
 
@@ -123,6 +124,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 		return PostMessageResult{}, fmt.Errorf("reading response body in postMessage failed: %w", err)
 	}
 
+	// After retrying, if response status code is not 200, it's server failure.
 	if resp.StatusCode != statusCodeSuccess {
 		return PostMessageResult{
 			Type:       PostMessageResultServerFailure,
@@ -315,4 +317,15 @@ func abs(num int64) int64 {
 		return 0 // return correctly abs(-0)
 	}
 	return num
+}
+
+// To use go-retryable go-retryablehttp's error handler. Default error handling surpresses response of
+// unexpected HTTP status. We want to propagate response to caller.
+func returnResponseHandler(resp *http.Response, err error, numTries int) (*http.Response, error) {
+	// Retry ends with unexpected HTTP status. This is normal situation so don't return error to caller.
+	if err == nil {
+		return resp, nil
+	}
+	// Else propagate error to caller with attempt information.
+	return resp, fmt.Errorf("giving up after %d attempt(s): %w", numTries, err)
 }
