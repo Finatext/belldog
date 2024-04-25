@@ -331,9 +331,14 @@ const correctMatchSize = 3
 var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/?$`)
 
 func parsePath(path string) (channelName string, token string, err error) {
-	res := pathRe.FindStringSubmatch(path)
+	decodedPath, err := url.PathUnescape(path)
+	if err != nil {
+		err = fmt.Errorf("error decoding path `%s`: %v", path, err)
+		return
+	}
+	res := pathRe.FindStringSubmatch(decodedPath)
 	if len(res) != correctMatchSize {
-		err = fmt.Errorf("channelName or token not found: %s", path)
+		err = fmt.Errorf("channelName or token not found: %s", decodedPath)
 		return
 	}
 	channelName, token = res[1], res[2]
