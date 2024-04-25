@@ -333,7 +333,7 @@ var pathRe = regexp.MustCompilePOSIX(`^/p/([^/]+)/([^/]+)/?$`)
 func parsePath(path string) (channelName string, token string, err error) {
 	decodedPath, err := url.PathUnescape(path)
 	if err != nil {
-		err = fmt.Errorf("error decoding path `%s`: %v", path, err)
+		err = fmt.Errorf("error decoding path `%s`: %w", path, err)
 		return
 	}
 	res := pathRe.FindStringSubmatch(decodedPath)
