@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.21 AS build
+FROM golang:1.22 AS build
 WORKDIR /src
 # pre-copy/cache go.mod for pre-downloading dependencies and only redownloading
 # them in subsequent builds if they change.
