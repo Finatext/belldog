@@ -13,6 +13,14 @@ updates:
       gomod-all:
         patterns:
           - "*"
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "12:00"
+      timezone: "Asia/Tokyo"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
