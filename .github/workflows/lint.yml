@@ -12,9 +12,9 @@ jobs:
     name: Run lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - name: golangci-lint
-        uses: reviewdog/action-golangci-lint@00311c26a97213f93f2fd3a3524d66762e956ae0 # v2.6.1
+        uses: reviewdog/action-golangci-lint@7708105983c614f7a2725e2172908b7709d1c3e4 # v2.6.2
         with:
           github_token: ${{ github.token }}
           level: error
