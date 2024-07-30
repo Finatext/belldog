@@ -6,8 +6,8 @@ require (
 	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.30.3
 	github.com/aws/aws-sdk-go-v2/config v1.27.27
-	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.14.9
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.34.3
+	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.14.10
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.34.4
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.3
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/kelseyhightower/envconfig v1.4.0
