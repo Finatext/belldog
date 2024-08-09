@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,10 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/cockroachdb/errors"
+
 	"github.com/Finatext/belldog/domain"
 	"github.com/Finatext/belldog/slack"
 	"github.com/Finatext/belldog/storage"
-	"github.com/aws/aws-lambda-go/events"
 )
 
 const (
@@ -35,6 +36,7 @@ type (
 func handleRequestWithCacheControl(ctx context.Context, req request) (response, error) {
 	res, err := handleRequestWithAccessLogging(ctx, req)
 	if err != nil {
+		slog.ErrorContext(ctx, "event handler failed", slog.String("error", fmt.Sprintf("%+v", err)))
 		return res, err
 	}
 	if res.Headers == nil {
@@ -81,7 +83,7 @@ func handleRequest(ctx context.Context, req request) (response, error) {
 	}
 	body, err := decodeBody(req)
 	if err != nil {
-		return response{}, fmt.Errorf("decoding body failed: %w", err)
+		return response{}, err
 	}
 
 	switch {
@@ -100,7 +102,7 @@ func decodeBody(req request) ([]byte, error) {
 	if req.IsBase64Encoded {
 		b, err := base64.StdEncoding.DecodeString(req.Body)
 		if err != nil {
-			return []byte{}, fmt.Errorf("base64 decoding of request body failed: %w", err)
+			return []byte{}, errors.Wrap(err, "failed to decode base64")
 		}
 		return b, nil
 	}
@@ -116,7 +118,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
 	cmdReq, err := kit.GetFullCommandRequest(ctx, string(body))
 	if err != nil {
-		return response{}, fmt.Errorf("kit.GetFullCommandRequest failed: %w", err)
+		return response{}, err
 	}
 	logCommandRequest(ctx, cmdReq)
 	if !cmdReq.Supported {
@@ -125,7 +127,7 @@ func handleSlashCommand(ctx context.Context, req request, body []byte) (response
 
 	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
-		return response{}, fmt.Errorf("storage.NewStorage failed: %w", err)
+		return response{}, err
 	}
 
 	svc := domain.NewDomain(st)
@@ -157,12 +159,12 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 
 	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
-		return response{}, fmt.Errorf("NewStorage failed: %w", err)
+		return response{}, err
 	}
 	svc := domain.NewDomain(st)
 	res, err := svc.VerifyToken(ctx, channelName, token)
 	if err != nil {
-		return response{}, fmt.Errorf("VerifyToken failed: %w", err)
+		return response{}, err
 	}
 	if res.NotFound {
 		slog.InfoContext(ctx, "No token generated, response not found", slog.String("channel_name", channelName))
@@ -190,7 +192,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 			slog.Int("body size", len(body)),
 		)
 		slog.DebugContext(ctx, "debug PostMessage failed", slog.String("body", string(body)))
-		return response{}, fmt.Errorf("PostMessage failed: %w", err)
+		return response{}, err
 	}
 
 	switch result.Type {
@@ -239,7 +241,7 @@ func handleWebhook(ctx context.Context, req request, body []byte) (response, err
 func processCmdShow(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest, req request) (response, error) {
 	entries, err := svc.GetTokens(ctx, cmdReq.ChannelName)
 	if err != nil {
-		return response{}, fmt.Errorf("domain.GetTokens failed: %w", err)
+		return response{}, err
 	}
 	tokenURLList := make([]string, 0, len(entries))
 	for _, entry := range entries {
@@ -259,7 +261,7 @@ func processCmdShow(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCo
 func processCmdGenerate(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest, req request) (response, error) {
 	res, err := svc.GenerateAndSaveToken(ctx, cmdReq.ChannelID, cmdReq.ChannelName)
 	if err != nil {
-		return response{}, fmt.Errorf("domain.GenerateAndSaveToken failed: %w", err)
+		return response{}, err
 	}
 	if !res.IsGenerated {
 		msg := fmt.Sprintf("Token already generated. To check generated token, use `%s`. To generate another token, use `%s`.\n", cmdShow, cmdRegenerate)
@@ -273,7 +275,7 @@ func processCmdGenerate(ctx context.Context, svc domain.Domain, cmdReq slack.Sla
 func processCmdRegenerate(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest, req request) (response, error) {
 	res, err := svc.RegenerateToken(ctx, cmdReq.ChannelID, cmdReq.ChannelName)
 	if err != nil {
-		return response{}, fmt.Errorf("domain.RegenerateToken failed: %w", err)
+		return response{}, err
 	}
 	if res.NoTokenFound {
 		return buildResponse(fmt.Sprintf("No token have been generated for this channel. Use `%s` to generate token.\n", cmdGenerate))
@@ -290,7 +292,7 @@ func processCmdRegenerate(ctx context.Context, svc domain.Domain, cmdReq slack.S
 func processCmdRevoke(ctx context.Context, svc domain.Domain, cmdReq slack.SlashCommandRequest) (response, error) {
 	res, err := svc.RevokeToken(ctx, cmdReq.ChannelName, cmdReq.Text)
 	if err != nil {
-		return response{}, fmt.Errorf("domain.RevokeToken failed: %w", err)
+		return response{}, err
 	}
 	if res.NotFound {
 		msg := fmt.Sprintf("No pair found, check the token: channel_name=%s, token=%s\n", cmdReq.ChannelName, cmdReq.Text)
@@ -311,7 +313,7 @@ func processCmdRevokeRenamed(ctx context.Context, svc domain.Domain, cmdReq slac
 	channelName, token := args[0], args[1]
 	res, err := svc.RevokeRenamedToken(ctx, cmdReq.ChannelID, channelName, token)
 	if err != nil {
-		return response{}, fmt.Errorf("domain.RevokeToken failed: %w", err)
+		return response{}, err
 	}
 	if res.NotFound {
 		msg := fmt.Sprintf("No pair found, check the token: channel_name=%s, token=%s\n", channelName, token)
@@ -369,14 +371,14 @@ func parseRequestBody(req request, body []byte) (map[string]interface{}, error) 
 	if ok && contentType == "application/x-www-form-urlencoded" {
 		b, err := extractPayloadValue(body)
 		if err != nil {
-			return nil, fmt.Errorf("extractPayloadValue failed: %w", err)
+			return nil, err
 		}
 		body = b
 	}
 
 	var payload map[string]interface{}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("json.Unmarshal failed: %w", err)
+		return nil, errors.Wrap(err, "failed to unmarshal JSON")
 	}
 	return payload, nil
 }
@@ -404,7 +406,7 @@ func extractPayloadValue(body []byte) ([]byte, error) {
 		return body, nil
 	}
 	if len(v) != 1 {
-		return nil, errors.New("the `payload` value must be a single value")
+		return nil, errors.Newf("the HTTP query `payload` value must be a single value: len=%d", len(v))
 	}
 	return []byte(v[0]), nil
 }
@@ -424,7 +426,7 @@ func buildResponse(msg string) (response, error) {
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return response{}, fmt.Errorf("json.Marshal failed: %w", err)
+		return response{}, errors.Wrap(err, "failed to marshal response")
 	}
 	return response{Body: string(body), StatusCode: http.StatusOK}, nil
 }

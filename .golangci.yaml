@@ -1,6 +1,8 @@
 linters:
   presets:
     - bugs
+  enable:
+    - wrapcheck
 linters-settings:
   varnamelen:
     ignore-map-index-ok: true
@@ -9,3 +11,7 @@ linters-settings:
     allow-packages:
       - main
       - domain
+  wrapcheck:
+    ignorePackageGlobs:
+      - github.com/cockroachdb/errors*
+      - github.com/Finatext/belldog*
