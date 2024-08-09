@@ -3,7 +3,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +10,7 @@ import (
 	av "github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/cockroachdb/errors"
 )
 
 type itemMap map[string]types.AttributeValue
@@ -31,7 +31,7 @@ type Storage struct {
 func NewStorage(ctx context.Context, tableName string) (*Storage, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return &Storage{}, fmt.Errorf("unable to load SDK config: %w", err)
+		return &Storage{}, errors.Wrap(err, "failed to load AWS config")
 	}
 	client := dynamodb.NewFromConfig(cfg)
 
@@ -41,14 +41,14 @@ func NewStorage(ctx context.Context, tableName string) (*Storage, error) {
 func (s *Storage) Save(ctx context.Context, rec Record) error {
 	m, err := av.MarshalMap(rec)
 	if err != nil {
-		return fmt.Errorf("attributevalue.MarshalMap failed: %w", err)
+		return errors.Wrapf(err, "failed to marshal record: %+v", rec)
 	}
 	input := dynamodb.PutItemInput{
 		Item:      m,
 		TableName: s.tableName,
 	}
 	if _, err := s.client.PutItem(ctx, &input); err != nil {
-		return fmt.Errorf("dynamodb.PutItem failed: %w", err)
+		return errors.Wrap(err, "failed to put item")
 	}
 	return nil
 }
@@ -64,14 +64,14 @@ func (s *Storage) QueryByChannelName(ctx context.Context, channelName string) ([
 	}
 	out, err := s.client.Query(ctx, &input)
 	if err != nil {
-		return []Record{}, fmt.Errorf("dynamodb.Query failed: %w", err)
+		return []Record{}, errors.Wrap(err, "failed to query")
 	}
 
 	recs := make([]Record, len(out.Items))
 	for i, item := range out.Items {
 		rec := Record{}
 		if err := av.UnmarshalMap(item, &rec); err != nil {
-			return []Record{}, fmt.Errorf("attributevalue.UnmarshalMap failed: %w", err)
+			return []Record{}, errors.Wrapf(err, "failed to unmarshal item: %v", item)
 		}
 		recs[i] = rec
 	}
@@ -93,10 +93,10 @@ func (s *Storage) Delete(ctx context.Context, rec Record) error {
 	}
 	out, err := s.client.DeleteItem(ctx, &input)
 	if err != nil {
-		return fmt.Errorf("dynamodb.DeleteItem failed: %w", err)
+		return errors.Wrap(err, "failed to delete")
 	}
 	if len(out.Attributes) == 0 {
-		return fmt.Errorf("no item deleted: rec=%v", rec)
+		return errors.Newf("no item deleted: rec=%v", rec)
 	}
 	// Success.
 	return nil
@@ -115,13 +115,13 @@ func (s *Storage) ScanAll(ctx context.Context) ([]Record, error) {
 		}
 		out, err := s.client.Scan(ctx, &input)
 		if err != nil {
-			return []Record{}, fmt.Errorf("dynamodb.Scan failed: %w", err)
+			return []Record{}, errors.Wrap(err, "failed to scan")
 		}
 
 		for _, item := range out.Items {
 			rec := Record{}
 			if err := av.UnmarshalMap(item, &rec); err != nil {
-				return []Record{}, fmt.Errorf("attributevalue.UnmarshalMap failed: %w", err)
+				return []Record{}, errors.Wrapf(err, "failed to unmarshal item: %v", item)
 			}
 			recs = append(recs, rec)
 		}

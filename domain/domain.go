@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/errors"
 
 	"github.com/Finatext/belldog/storage"
 )
@@ -64,13 +65,13 @@ func NewDomain(st Storage) Domain {
 func (d *Domain) GetTokens(ctx context.Context, channelName string) ([]Entry, error) {
 	recs, err := d.st.QueryByChannelName(ctx, channelName)
 	if err != nil {
-		return []Entry{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return []Entry{}, err
 	}
 	entries := make([]Entry, 0, len(recs))
 	for _, rec := range recs {
 		e, err := recordToEntry(rec)
 		if err != nil {
-			return []Entry{}, fmt.Errorf("recordToEntry failed: %w", err)
+			return []Entry{}, err
 		}
 		entries = append(entries, e)
 	}
@@ -83,7 +84,7 @@ func (d *Domain) GetTokens(ctx context.Context, channelName string) ([]Entry, er
 func (d *Domain) VerifyToken(ctx context.Context, channelName string, givenToken string) (VerifyResult, error) {
 	recs, err := d.st.QueryByChannelName(ctx, channelName)
 	if err != nil {
-		return VerifyResult{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return VerifyResult{}, err
 	}
 	if len(recs) == 0 {
 		return VerifyResult{NotFound: true}, nil
@@ -105,7 +106,7 @@ func (d *Domain) VerifyToken(ctx context.Context, channelName string, givenToken
 func (d *Domain) GenerateAndSaveToken(ctx context.Context, channelID string, channelName string) (GenerateResult, error) {
 	recs, err := d.st.QueryByChannelName(ctx, channelName)
 	if err != nil {
-		return GenerateResult{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return GenerateResult{}, err
 	}
 	if len(recs) > 0 {
 		rec := recs[0]
@@ -127,7 +128,7 @@ func (d *Domain) GenerateAndSaveToken(ctx context.Context, channelID string, cha
 		CreatedAt:   currentTimestamp(),
 	}
 	if err := d.st.Save(ctx, record); err != nil {
-		return GenerateResult{}, fmt.Errorf("storage.Save failed: %w", err)
+		return GenerateResult{}, err
 	}
 
 	res := GenerateResult{IsGenerated: true, Token: token}
@@ -142,7 +143,7 @@ const maxTokenCount = 2
 func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelName string) (RegenerateResult, error) {
 	recs, err := d.st.QueryByChannelName(ctx, channelName)
 	if err != nil {
-		return RegenerateResult{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return RegenerateResult{}, err
 	}
 	if len(recs) == 0 {
 		return RegenerateResult{NoTokenFound: true}, nil
@@ -154,7 +155,7 @@ func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelN
 	gen := generatorImpl{}
 	token, err := generateWithRetry(recs, &gen)
 	if err != nil {
-		return RegenerateResult{}, fmt.Errorf("same token generated: token=%s", token)
+		return RegenerateResult{}, errors.Wrapf(err, "same token generated: token=%s", token)
 	}
 
 	// QueryByChannelName returns sorted records.
@@ -167,7 +168,7 @@ func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelN
 		CreatedAt:   currentTimestamp(),
 	}
 	if err := d.st.Save(ctx, record); err != nil {
-		return RegenerateResult{}, fmt.Errorf("storage.Save failed: %w", err)
+		return RegenerateResult{}, err
 	}
 	return RegenerateResult{Token: token}, nil
 }
@@ -175,7 +176,7 @@ func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelN
 func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken string) (RevokeResult, error) {
 	recs, err := d.st.QueryByChannelName(ctx, channelName)
 	if err != nil {
-		return RevokeResult{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return RevokeResult{}, err
 	}
 	if len(recs) == 0 {
 		return RevokeResult{NotFound: true}, nil
@@ -184,7 +185,7 @@ func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken
 	for _, rec := range recs {
 		if rec.Token == givenToken {
 			if err := d.st.Delete(ctx, rec); err != nil {
-				return RevokeResult{}, fmt.Errorf("Storage.Delete failed: %w", err)
+				return RevokeResult{}, err
 			}
 			// Success.
 			return RevokeResult{}, nil
@@ -197,7 +198,7 @@ func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken
 func (d *Domain) RevokeRenamedToken(ctx context.Context, channelID string, givenChannelName string, givenToken string) (RevokeRenamedResult, error) {
 	recs, err := d.st.QueryByChannelName(ctx, givenChannelName)
 	if err != nil {
-		return RevokeRenamedResult{}, fmt.Errorf("QueryByChannelName failed: %w", err)
+		return RevokeRenamedResult{}, err
 	}
 	if len(recs) == 0 {
 		return RevokeRenamedResult{NotFound: true}, nil
@@ -210,7 +211,7 @@ func (d *Domain) RevokeRenamedToken(ctx context.Context, channelID string, given
 			}
 
 			if err := d.st.Delete(ctx, rec); err != nil {
-				return RevokeRenamedResult{}, fmt.Errorf("Storage.Delete failed: %w", err)
+				return RevokeRenamedResult{}, err
 			}
 			// Success.
 			return RevokeRenamedResult{}, nil
@@ -230,7 +231,7 @@ const randomStringLen = 16
 func (g *generatorImpl) generate() (string, error) {
 	k := make([]byte, randomStringLen)
 	if _, err := rand.Read(k); err != nil {
-		return "", fmt.Errorf("rand.Read failed: %w", err)
+		return "", errors.Wrap(err, "failed to generate random string")
 	}
 	return fmt.Sprintf("%x", k), nil
 }
@@ -241,7 +242,7 @@ func generateWithRetry(recs []storage.Record, gen generator) (string, error) {
 
 		token, err := gen.generate()
 		if err != nil {
-			return "", fmt.Errorf("generator.generate failed: %w", err)
+			return "", errors.Wrap(err, "failed to generate token")
 		}
 		for _, rec := range recs {
 			if token == rec.Token {
@@ -260,7 +261,7 @@ func generateWithRetry(recs []storage.Record, gen generator) (string, error) {
 func recordToEntry(rec storage.Record) (Entry, error) {
 	t, err := time.Parse(time.RFC3339Nano, rec.CreatedAt)
 	if err != nil {
-		return Entry{}, fmt.Errorf("time.Parse failed: %w", err)
+		return Entry{}, errors.Wrapf(err, "failed to parse created_at: %s", rec.CreatedAt)
 	}
 	return Entry{Token: rec.Token, Version: rec.Version, CreatedAt: t}, nil
 }

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/slack-go/slack"
 )
@@ -98,12 +98,12 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	payload["channel"] = channelID
 	jsonStr, err := json.Marshal(payload)
 	if err != nil {
-		return PostMessageResult{}, fmt.Errorf("json marshaling payload failed: %w", err)
+		return PostMessageResult{}, errors.Wrap(err, "failed to marshal payload")
 	}
 	body := strings.NewReader(string(jsonStr))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackAPIPostMessageEndpoint, body)
 	if err != nil {
-		return PostMessageResult{}, fmt.Errorf("http.NewRequestWithContext failed: %w", err)
+		return PostMessageResult{}, errors.Wrap(err, "failed to create Slack API request")
 	}
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", s.token))
 	req.Header.Add("content-type", "application/json")
@@ -116,12 +116,12 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 			return PostMessageResult{Type: PostMessageResultServerTimeoutFailure}, nil
 		}
 		// If err is not due to timeout, it's unexpected error.
-		return PostMessageResult{}, fmt.Errorf("http request to slack API failed: %w", err)
+		return PostMessageResult{}, errors.Wrap(err, "unexpected error from Slack API")
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return PostMessageResult{}, fmt.Errorf("reading response body in postMessage failed: %w", err)
+		return PostMessageResult{}, errors.Wrap(err, "failed to read Slack response body")
 	}
 
 	// After retrying, if response status code is not 200, it's server failure.
@@ -135,7 +135,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 
 	res := slackPostMessageResponse{}
 	if err := json.Unmarshal(b, &res); err != nil {
-		return PostMessageResult{}, fmt.Errorf("unmarshalling Slack post messsage failed: %w", err)
+		return PostMessageResult{}, errors.Wrap(err, "failed to unmarshal Slack response")
 	}
 
 	if !res.Ok {
@@ -184,7 +184,7 @@ func (s *Kit) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 					continue
 				}
 			}
-			return nil, fmt.Errorf("slack-go GetConversationsContext failed: %w", err)
+			return nil, errors.Wrap(err, "failed to get conversations")
 		}
 
 		channels = append(channels, chans...)
@@ -222,7 +222,7 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 				Supported:                   false,
 			}, nil
 		}
-		return SlashCommandRequest{}, fmt.Errorf("failed to call conversations.info API: %w", err)
+		return SlashCommandRequest{}, err
 	}
 	return SlashCommandRequest{
 		OriginalSlashCommandRequest: cmdReq,
@@ -242,7 +242,7 @@ func (s *Kit) getChannelInfo(ctx context.Context, channelID string) (*slack.Chan
 	}
 	channel, err := client.GetConversationInfoContext(ctx, &input)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get conversation info")
 	}
 
 	return channel, nil
@@ -297,7 +297,7 @@ func VerifySlackRequest(ctx context.Context, key string, headers map[string]stri
 func parseSlashCommandRequest(body string) (OriginalSlashCommandRequest, error) {
 	query, err := url.ParseQuery(body)
 	if err != nil {
-		return OriginalSlashCommandRequest{}, fmt.Errorf("url.ParseQuery failed: %w", err)
+		return OriginalSlashCommandRequest{}, errors.Wrapf(err, "failed to parse HTTP query: %s", body)
 	}
 
 	req := OriginalSlashCommandRequest{
@@ -327,5 +327,5 @@ func returnResponseHandler(resp *http.Response, err error, numTries int) (*http.
 		return resp, nil
 	}
 	// Else propagate error to caller with attempt information.
-	return resp, fmt.Errorf("giving up after %d attempt(s): %w", numTries, err)
+	return resp, errors.Wrapf(err, "giving up after %d attempt(s): %w", numTries)
 }

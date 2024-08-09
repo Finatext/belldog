@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/aws/aws-lambda-go/events"
+
 	"github.com/Finatext/belldog/slack"
 	"github.com/Finatext/belldog/storage"
-	"github.com/aws/aws-lambda-go/events"
 )
 
 type renameEvent struct {
@@ -20,20 +21,27 @@ type renameEvent struct {
 // Bypass domain layer because we don't have enough logic and tests yet for batch app code.
 func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 	ctx := context.Background()
+	if err := handleWithErrorLogging(ctx, event); err != nil {
+		slog.ErrorContext(ctx, "failed to handle", slog.String("error", fmt.Sprintf("%+v", err)))
+		return err
+	}
+	return nil
+}
 
+func handleWithErrorLogging(ctx context.Context, _ events.CloudWatchEvent) error {
 	st, err := storage.NewStorage(ctx, config.DdbTableName)
 	if err != nil {
-		return fmt.Errorf("storage.NewStorage failed: %w", err)
+		return err
 	}
 	recs, err := st.ScanAll(ctx)
 	if err != nil {
-		return fmt.Errorf("Storage.ScanAll failed: %w", err)
+		return err
 	}
 
 	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
 	channels, err := kit.GetAllChannels(ctx)
 	if err != nil {
-		return fmt.Errorf("slack.GetAllChannels failed: %w", err)
+		return err
 	}
 
 	migrations := make(map[string]storage.Record)
@@ -61,7 +69,7 @@ func handleCloudWatchEvent(event events.CloudWatchEvent) error {
 		msgOps := fmt.Sprintf("Token is in migration: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
 		msg := fmt.Sprintf("Token is in migration. Once all old webhook URLs are replaced, revoke old token: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
 		if err := notify(ctx, kit, rec.ChannelID, rec.ChannelName, msg, msgOps); err != nil {
-			return fmt.Errorf("notify failed: %w", err)
+			return err
 		}
 	}
 	for _, evt := range renames {
@@ -81,7 +89,7 @@ Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, re
 		`
 		msg := fmt.Sprintf(format, evt.channelID, evt.oldName, evt.newName, evt.oldName, evt.savedToken)
 		if err := notify(ctx, kit, evt.channelID, evt.newName, msg, msgOps); err != nil {
-			return fmt.Errorf("notify failed: %w", err)
+			return err
 		}
 	}
 	return nil
@@ -92,7 +100,7 @@ func notify(ctx context.Context, kit slack.Kit, channelID string, channelName st
 	{
 		result, err := kit.PostMessage(ctx, channelID, channelName, payload)
 		if err != nil {
-			return fmt.Errorf("kit.PostMessage failed: %w", err)
+			return err
 		}
 		if e := handlePostMessageFailure(result); e != nil {
 			return e
@@ -102,7 +110,7 @@ func notify(ctx context.Context, kit slack.Kit, channelID string, channelName st
 	// kit.PostMessage can accept channel name as channel id.
 	result, err := kit.PostMessage(ctx, config.OpsNotificationChannelName, config.OpsNotificationChannelName, payloadOps)
 	if err != nil {
-		return fmt.Errorf("kit.PostMessage failed: %w", err)
+		return err
 	}
 	if e := handlePostMessageFailure(result); e != nil {
 		return e

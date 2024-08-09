@@ -7,11 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/Finatext/belldog/slack"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/cockroachdb/errors"
 	"github.com/kelseyhightower/envconfig"
+
+	"github.com/Finatext/belldog/slack"
 )
 
 type Config struct {
@@ -45,6 +47,13 @@ var (
 )
 
 func main() {
+	if err := doMain(); err != nil {
+		slog.Error("failed to run", slog.String("error", fmt.Sprintf("%+v", err)))
+		os.Exit(1)
+	}
+}
+
+func doMain() error {
 	ctx := context.Background()
 	logLevel := new(slog.LevelVar)
 	ops := slog.HandlerOptions{
@@ -57,8 +66,7 @@ func main() {
 	var c EnvConfig
 	err := envconfig.Process("", &c)
 	if err != nil {
-		slog.Error("parse env failed", slog.String("error", err.Error()))
-		os.Exit(1)
+		return errors.Wrap(err, "failed to process envconfig")
 	}
 	config.EnvConfig = c
 	slackRetryConfig = toSlackRetryConfig(config)
@@ -67,15 +75,13 @@ func main() {
 
 	token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
 	if err != nil {
-		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
-		os.Exit(1)
+		return err
 	}
 	config.SlackToken = token
 
 	secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
 	if err != nil {
-		slog.Error("fetchParamter failed", slog.String("error", err.Error()))
-		os.Exit(1)
+		return err
 	}
 	config.SlackSigningSecret = secret
 
@@ -85,15 +91,15 @@ func main() {
 	case "batch":
 		lambda.Start(handleCloudWatchEvent)
 	default:
-		slog.Error("Unknown `mode` env given", slog.String("mode", config.Mode))
-		os.Exit(1)
+		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}
+	return nil
 }
 
 func fetchParamter(ctx context.Context, paramName string) (string, error) {
 	cfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
-		return "", fmt.Errorf("unable to load SDK config: %w", err)
+		return "", errors.Wrap(err, "failed to load AWS config")
 	}
 	client := ssm.NewFromConfig(cfg)
 	t := true
@@ -103,7 +109,7 @@ func fetchParamter(ctx context.Context, paramName string) (string, error) {
 	}
 	res, err := client.GetParameter(ctx, input)
 	if err != nil {
-		return "", fmt.Errorf("unable to fetch SSM parameter: %w", err)
+		return "", errors.Wrap(err, "failed to get SSM parameter")
 	}
 
 	value := *res.Parameter.Value
