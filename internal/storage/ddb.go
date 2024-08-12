@@ -26,9 +26,9 @@ type DDB struct {
 	tableName *string
 }
 
-func NewDDB(ctx context.Context, awsConfig aws.Config, tableName string) (*DDB, error) {
+func NewDDB(ctx context.Context, awsConfig aws.Config, tableName string) (DDB, error) {
 	inner := dynamodb.NewFromConfig(awsConfig)
-	return &DDB{inner: inner, tableName: &tableName}, nil
+	return DDB{inner: inner, tableName: &tableName}, nil
 }
 
 func (s *DDB) Save(ctx context.Context, rec Record) error {

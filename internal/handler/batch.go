@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/cockroachdb/errors"
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/slack"
@@ -18,8 +19,8 @@ type BatchHandler struct {
 	ddb         storageDDB
 }
 
-func NewBatchHandler(cfg appconfig.Config, slackClient slackClient, ddb storageDDB) *BatchHandler {
-	return &BatchHandler{
+func NewBatchHandler(cfg appconfig.Config, slackClient slackClient, ddb storageDDB) BatchHandler {
+	return BatchHandler{
 		cfg:         cfg,
 		slackClient: slackClient,
 		ddb:         ddb,
@@ -27,15 +28,15 @@ func NewBatchHandler(cfg appconfig.Config, slackClient slackClient, ddb storageD
 }
 
 // Bypass domain layer because we don't have enough logic and tests yet for batch app code.
-func (h *BatchHandler) HandleCloudWatchEvent(ctx context.Context, event events.CloudWatchEvent) error {
-	if err := h.handleWithErrorLogging(ctx, event); err != nil {
+func (h *BatchHandler) HandleCloudWatchEvent(ctx context.Context, _ events.CloudWatchEvent) error {
+	if err := h.handleWithErrorLogging(ctx); err != nil {
 		slog.ErrorContext(ctx, "failed to handle", slog.String("error", fmt.Sprintf("%+v", err)))
 		return err
 	}
 	return nil
 }
 
-func (h *BatchHandler) handleWithErrorLogging(ctx context.Context, _ events.CloudWatchEvent) error {
+func (h *BatchHandler) handleWithErrorLogging(ctx context.Context) error {
 	recs, err := h.ddb.ScanAll(ctx)
 	if err != nil {
 		return err
@@ -66,6 +67,7 @@ func (h *BatchHandler) handleWithErrorLogging(ctx context.Context, _ events.Clou
 		}
 	}
 
+	slog.InfoContext(ctx, "processing migrations", slog.Int("size", len(migrations)))
 	for _, rec := range migrations {
 		slog.InfoContext(ctx, "Token is in migration", slog.String("channel_name", rec.ChannelName), slog.String("channel_id", rec.ChannelID))
 		msgOps := fmt.Sprintf("Token is in migration: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
@@ -74,6 +76,8 @@ func (h *BatchHandler) handleWithErrorLogging(ctx context.Context, _ events.Clou
 			return err
 		}
 	}
+
+	slog.InfoContext(ctx, "processing renames", slog.Int("size", len(renames)))
 	for _, evt := range renames {
 		slog.InfoContext(ctx, "Channel name and channel id pair updated",
 			slog.String("channel_id", evt.channelID),
@@ -94,6 +98,8 @@ Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, re
 			return err
 		}
 	}
+
+	slog.InfoContext(ctx, "batch process completed")
 	return nil
 }
 
@@ -132,12 +138,12 @@ func handlePostMessageFailure(result slack.PostMessageResult) error {
 	case slack.PostMessageResultOK:
 		return nil
 	case slack.PostMessageResultServerTimeoutFailure:
-		return fmt.Errorf("slack server timeout")
+		return errors.New("slack server timeout")
 	case slack.PostMessageResultServerFailure:
-		return fmt.Errorf("slack server error: code=%d, body=%s", result.StatusCode, result.Body)
+		return errors.Newf("slack server error: code=%d, body=%s", result.StatusCode, result.Body)
 	case slack.PostMessageResultDomainFailure:
-		return fmt.Errorf("slack domain error: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
+		return errors.Newf("slack domain error: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
 	default:
-		return fmt.Errorf("unknown PostMessageResult type: %d", result.Type)
+		return errors.Newf("unknown PostMessageResult type: %d", result.Type)
 	}
 }

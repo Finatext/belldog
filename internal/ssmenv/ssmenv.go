@@ -2,6 +2,7 @@ package ssmenv
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -27,6 +28,11 @@ func ReplacedEnv(ctx context.Context, cli ssmClient, envs []string) (map[string]
 		}
 	}
 
+	if len(ssmKeys) == 0 {
+		return orig, nil
+	}
+
+	slog.InfoContext(ctx, "fetching SSM parameters", slog.String("keys", strings.Join(ssmKeys, ",")))
 	ps, err := batchFetch(ctx, cli, ssmKeys)
 	if err != nil {
 		return nil, err

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
+	"github.com/Finatext/belldog/internal/lambdaurl"
 	"github.com/Finatext/belldog/internal/service"
 	"github.com/Finatext/belldog/internal/slack"
 	"github.com/Finatext/belldog/internal/ssmenv"
@@ -56,8 +56,7 @@ func doMain() error {
 		return errors.Wrap(err, "failed to process envconfig")
 	}
 
-	// TODO: set global logger
-	logLevel.Set(config.LogLevel)
+	logLevel.Set(config.GoLog)
 
 	if config.ParameterNameSlackToken != "" {
 		slog.Warn("PARAMETER_NAME_SLACK_TOKEN is deprecated, use SLACK_TOKEN instead")
@@ -81,21 +80,15 @@ func doMain() error {
 	if err != nil {
 		return err
 	}
-	tokenSvc := service.NewTokenService(ddb)
+	tokenSvc := service.NewTokenService(&ddb)
 
 	switch config.Mode {
 	case "proxy":
-		h := handler.NewProxyHandler(config, &slackClient, &tokenSvc)
-		f := func(ctx context.Context, req handler.Request) (handler.Response, error) {
-			return h.HandleRequestWithCacheControl(ctx, req)
-		}
-		lambda.Start(f)
+		e := handler.NewEchoHandler(config, &slackClient, &tokenSvc)
+		lambda.Start(lambdaurl.Wrap(e))
 	case "batch":
-		h := handler.NewBatchHandler(config, &slackClient, ddb)
-		f := func(ctx context.Context, event events.CloudWatchEvent) error {
-			return h.HandleCloudWatchEvent(ctx, event)
-		}
-		lambda.Start(f)
+		h := handler.NewBatchHandler(config, &slackClient, &ddb)
+		lambda.Start(h.HandleCloudWatchEvent)
 	default:
 		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}
@@ -120,7 +113,7 @@ func fetchParamter(ctx context.Context, paramName string) (string, error) {
 
 	value := *res.Parameter.Value
 	if value == "" {
-		return "", fmt.Errorf("empty SSM parameter value found: %s", paramName)
+		return "", errors.Newf("empty SSM parameter value found: %s", paramName)
 	}
 	return value, nil
 }

@@ -16,3 +16,7 @@ linters-settings:
       - github.com/cockroachdb/errors*
       - github.com/stretchr/testify*
       - github.com/Finatext/belldog*
+    ignoreSigs:
+      # echo Handler
+      - .String(
+      - .JSON(
