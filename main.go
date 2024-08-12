@@ -11,8 +11,9 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/cockroachdb/errors"
-	"github.com/kelseyhightower/envconfig"
+	"github.com/sethvargo/go-envconfig"
 
+	"github.com/Finatext/belldog/internal/ssmenv"
 	"github.com/Finatext/belldog/slack"
 )
 
@@ -28,17 +29,21 @@ type Config struct {
 // Default HTTP client timeout covers from dialing (initiating TCP connection) to reading response body.
 // https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts
 type EnvConfig struct {
-	CustomDomainName                string        `split_words:"true"`
-	DdbTableName                    string        `split_words:"true" required:"true"`
-	LogLevel                        slog.Level    `split_words:"true" default:"info"`
-	Mode                            string        `split_words:"true" required:"true"`
-	OpsNotificationChannelName      string        `split_words:"true" required:"true"`
-	ParameterNameSlackSigningSecret string        `split_words:"true" required:"true"`
-	ParameterNameSlackToken         string        `split_words:"true" required:"true"`
-	RetryMax                        int           `split_words:"true" default:"3"`
-	RetryReadTimeoutDuration        time.Duration `split_words:"true" default:"5s"`
-	RetryWaitMaxDuration            time.Duration `split_words:"true" default:"10s"`
-	RetryWaitMinDuration            time.Duration `split_words:"true" default:"1s"`
+	CustomDomainName           string     `env:"CUSTOM_DOMAIN_NAME"`
+	DdbTableName               string     `env:"DDB_TABLE_NAME, required"`
+	LogLevel                   slog.Level `env:"LOG_LEVEL, default=info"`
+	Mode                       string     `env:"MODE, required"`
+	OpsNotificationChannelName string     `env:"OPS_NOTIFICATION_CHANNEL_NAME, required"`
+	// For backward compatibility
+	ParameterNameSlackSigningSecret string `env:"PARAMETER_NAME_SLACK_SIGNING_SECRET"`
+	SlackSigningSecret              string `env:"SLACK_SIGNING_SECRET"`
+	// For backward compatibility
+	ParameterNameSlackToken  string        `env:"PARAMETER_NAME_SLACK_TOKEN, required"`
+	SlackToken               string        `env:"SLACK_TOKEN"`
+	RetryMax                 int           `env:"RETRY_MAX, default=3"`
+	RetryReadTimeoutDuration time.Duration `env:"RETRY_READ_TIMEOUT_DURATION, default=5s"`
+	RetryWaitMaxDuration     time.Duration `env:"RETRY_WAIT_MAX_DURATION, default=10s"`
+	RetryWaitMinDuration     time.Duration `env:"RETRY_WAIT_MIN_DURATION, default=1s"`
 }
 
 var (
@@ -64,8 +69,20 @@ func doMain() error {
 	slog.SetDefault(logger)
 
 	var c EnvConfig
-	err := envconfig.Process("", &c)
+	awsConfig, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
+		return errors.Wrap(err, "failed to load AWS config")
+	}
+	ssmClient := ssm.NewFromConfig(awsConfig)
+	replacedEnv, err := ssmenv.ReplacedEnv(ctx, ssmClient, os.Environ())
+	if err != nil {
+		return err
+	}
+	envconfigConfig := envconfig.Config{
+		Target:   &c,
+		Lookuper: envconfig.MapLookuper(replacedEnv),
+	}
+	if err := envconfig.Process(ctx, envconfigConfig); err != nil {
 		return errors.Wrap(err, "failed to process envconfig")
 	}
 	config.EnvConfig = c
@@ -73,17 +90,26 @@ func doMain() error {
 
 	logLevel.Set(config.LogLevel)
 
-	token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
-	if err != nil {
-		return err
+	if config.EnvConfig.ParameterNameSlackToken != "" {
+		slog.Warn("PARAMETER_NAME_SLACK_TOKEN is deprecated, use SLACK_TOKEN instead")
+		token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
+		if err != nil {
+			return err
+		}
+		// For backward compatibility
+		config.EnvConfig.SlackToken = token
+		config.SlackToken = token
 	}
-	config.SlackToken = token
-
-	secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
-	if err != nil {
-		return err
+	if config.EnvConfig.ParameterNameSlackSigningSecret == "" {
+		slog.Warn("PARAMETER_NAME_SLACK_SIGNING_SECRET is deprecated, use SLACK_SIGNING_SECRET instead")
+		secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
+		if err != nil {
+			return err
+		}
+		// For backward compatibility
+		config.EnvConfig.SlackSigningSecret = secret
+		config.SlackSigningSecret = secret
 	}
-	config.SlackSigningSecret = secret
 
 	switch config.Mode {
 	case "proxy":
