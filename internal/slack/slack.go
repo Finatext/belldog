@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/slack-go/slack"
@@ -24,14 +25,6 @@ const (
 	slackAPIPostMessageEndpoint = "https://slack.com/api/chat.postMessage"
 	statusCodeSuccess           = 200
 )
-
-type RetryConfig struct {
-	Max     int
-	WaitMin time.Duration
-	WaitMax time.Duration
-	// Includes TCP connection establishment, TLS handshake, send HTTP request, read response body.
-	ReadTimeout time.Duration
-}
 
 type SlashCommandRequest struct {
 	OriginalSlashCommandRequest
@@ -67,23 +60,23 @@ const (
 	PostMessageResultDomainFailure
 )
 
-type Kit struct {
-	token      string
-	httpClient *http.Client
+type Client struct {
+	token string
+	inner *http.Client
 }
 
-func NewKit(token string, config RetryConfig) Kit {
+func NewClient(config appconfig.Config) Client {
 	// Default config values: https://github.com/hashicorp/go-retryablehttp/blob/v0.7.5/client.go#L429-L439
 	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = config.Max
-	retryClient.RetryWaitMin = config.WaitMin
-	retryClient.RetryWaitMax = config.WaitMax
+	retryClient.RetryMax = config.RetryMax
+	retryClient.RetryWaitMin = config.RetryWaitMinDuration
+	retryClient.RetryWaitMax = config.RetryWaitMaxDuration
 	retryClient.ErrorHandler = returnResponseHandler
-	retryClient.HTTPClient.Timeout = config.ReadTimeout
+	retryClient.HTTPClient.Timeout = config.RetryReadTimeoutDuration
 	retryClient.Logger = slog.Default()
 
 	httpClient := retryClient.StandardClient()
-	return Kit{token: token, httpClient: httpClient}
+	return Client{token: config.SlackToken, inner: httpClient}
 }
 
 // https://api.slack.com/methods/chat.postMessage#examples
@@ -94,7 +87,7 @@ type slackPostMessageResponse struct {
 }
 
 // https://api.slack.com/methods/chat.postMessage
-func (s Kit) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) (PostMessageResult, error) {
+func (s Client) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) (PostMessageResult, error) {
 	payload["channel"] = channelID
 	jsonStr, err := json.Marshal(payload)
 	if err != nil {
@@ -108,7 +101,7 @@ func (s Kit) PostMessage(ctx context.Context, channelID string, channelName stri
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", s.token))
 	req.Header.Add("content-type", "application/json")
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.inner.Do(req)
 	if err != nil {
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) && urlErr.Timeout() {
@@ -158,7 +151,7 @@ const slackPaginationLimit = 200
 // Required scopes:
 //   - channels:read (public channels)
 //   - groups:read (private channels)
-func (s *Kit) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
+func (s *Client) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 	// XXX: If more actions are defined to Kit, move embed this to Kit struct value.
 	client := slack.New(s.token)
 
@@ -203,7 +196,7 @@ func (s *Kit) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 // sends to us, contains wrong channel name info for private groups. So we need retrieve the correct
 // channel name via Slack API.
 // https://api.slack.com/types/group
-func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashCommandRequest, error) {
+func (s *Client) GetFullCommandRequest(ctx context.Context, body string) (SlashCommandRequest, error) {
 	cmdReq, err := parseSlashCommandRequest(body)
 	if err != nil {
 		return SlashCommandRequest{}, err
@@ -232,7 +225,7 @@ func (s *Kit) GetFullCommandRequest(ctx context.Context, body string) (SlashComm
 }
 
 // https://api.slack.com/methods/conversations.info
-func (s *Kit) getChannelInfo(ctx context.Context, channelID string) (*slack.Channel, error) {
+func (s *Client) getChannelInfo(ctx context.Context, channelID string) (*slack.Channel, error) {
 	client := slack.New(s.token)
 
 	input := slack.GetConversationInfoInput{

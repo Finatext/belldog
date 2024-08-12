@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -7,39 +7,41 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
-	"github.com/Finatext/belldog/slack"
-	"github.com/Finatext/belldog/storage"
+	"github.com/Finatext/belldog/internal/appconfig"
+	"github.com/Finatext/belldog/internal/slack"
+	"github.com/Finatext/belldog/internal/storage"
 )
 
-type renameEvent struct {
-	channelID  string
-	oldName    string
-	newName    string
-	savedToken string
+type BatchHandler struct {
+	cfg         appconfig.Config
+	slackClient slackClient
+	ddb         storageDDB
+}
+
+func NewBatchHandler(cfg appconfig.Config, slackClient slackClient, ddb storageDDB) *BatchHandler {
+	return &BatchHandler{
+		cfg:         cfg,
+		slackClient: slackClient,
+		ddb:         ddb,
+	}
 }
 
 // Bypass domain layer because we don't have enough logic and tests yet for batch app code.
-func handleCloudWatchEvent(event events.CloudWatchEvent) error {
-	ctx := context.Background()
-	if err := handleWithErrorLogging(ctx, event); err != nil {
+func (h *BatchHandler) HandleCloudWatchEvent(ctx context.Context, event events.CloudWatchEvent) error {
+	if err := h.handleWithErrorLogging(ctx, event); err != nil {
 		slog.ErrorContext(ctx, "failed to handle", slog.String("error", fmt.Sprintf("%+v", err)))
 		return err
 	}
 	return nil
 }
 
-func handleWithErrorLogging(ctx context.Context, _ events.CloudWatchEvent) error {
-	st, err := storage.NewStorage(ctx, config.DdbTableName)
-	if err != nil {
-		return err
-	}
-	recs, err := st.ScanAll(ctx)
+func (h *BatchHandler) handleWithErrorLogging(ctx context.Context, _ events.CloudWatchEvent) error {
+	recs, err := h.ddb.ScanAll(ctx)
 	if err != nil {
 		return err
 	}
 
-	kit := slack.NewKit(config.SlackToken, slackRetryConfig)
-	channels, err := kit.GetAllChannels(ctx)
+	channels, err := h.slackClient.GetAllChannels(ctx)
 	if err != nil {
 		return err
 	}
@@ -68,7 +70,7 @@ func handleWithErrorLogging(ctx context.Context, _ events.CloudWatchEvent) error
 		slog.InfoContext(ctx, "Token is in migration", slog.String("channel_name", rec.ChannelName), slog.String("channel_id", rec.ChannelID))
 		msgOps := fmt.Sprintf("Token is in migration: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
 		msg := fmt.Sprintf("Token is in migration. Once all old webhook URLs are replaced, revoke old token: channel_name=%s, channel_id=%s\n", rec.ChannelName, rec.ChannelID)
-		if err := notify(ctx, kit, rec.ChannelID, rec.ChannelName, msg, msgOps); err != nil {
+		if err := h.notify(ctx, rec.ChannelID, rec.ChannelName, msg, msgOps); err != nil {
 			return err
 		}
 	}
@@ -88,17 +90,17 @@ Detect channel renaming for this channel: channel_id=%s, old_channel_name=%s, re
 3. When all old URLs are replaced, revoke old token with the "revoke renamed slash command" with channel_name=%s and token=%s
 		`
 		msg := fmt.Sprintf(format, evt.channelID, evt.oldName, evt.newName, evt.oldName, evt.savedToken)
-		if err := notify(ctx, kit, evt.channelID, evt.newName, msg, msgOps); err != nil {
+		if err := h.notify(ctx, evt.channelID, evt.newName, msg, msgOps); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func notify(ctx context.Context, kit slack.Kit, channelID string, channelName string, msg string, msgOps string) error {
+func (h *BatchHandler) notify(ctx context.Context, channelID string, channelName string, msg string, msgOps string) error {
 	payload := map[string]interface{}{"text": msg}
 	{
-		result, err := kit.PostMessage(ctx, channelID, channelName, payload)
+		result, err := h.slackClient.PostMessage(ctx, channelID, channelName, payload)
 		if err != nil {
 			return err
 		}
@@ -108,7 +110,7 @@ func notify(ctx context.Context, kit slack.Kit, channelID string, channelName st
 	}
 	payloadOps := map[string]interface{}{"text": msgOps}
 	// kit.PostMessage can accept channel name as channel id.
-	result, err := kit.PostMessage(ctx, config.OpsNotificationChannelName, config.OpsNotificationChannelName, payloadOps)
+	result, err := h.slackClient.PostMessage(ctx, h.cfg.OpsNotificationChannelName, h.cfg.OpsNotificationChannelName, payloadOps)
 	if err != nil {
 		return err
 	}
@@ -116,6 +118,13 @@ func notify(ctx context.Context, kit slack.Kit, channelID string, channelName st
 		return e
 	}
 	return nil
+}
+
+type renameEvent struct {
+	channelID  string
+	oldName    string
+	newName    string
+	savedToken string
 }
 
 func handlePostMessageFailure(result slack.PostMessageResult) error {

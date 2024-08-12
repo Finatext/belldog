@@ -1,4 +1,4 @@
-package domain
+package service
 
 import (
 	"context"
@@ -9,17 +9,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 
-	"github.com/Finatext/belldog/storage"
+	"github.com/Finatext/belldog/internal/storage"
 )
 
-type Storage interface {
-	Save(ctx context.Context, record storage.Record) error
-	// QueryByChannelName returns found records having the same channel name.
-	// It returns empty slice when no record found.
-	QueryByChannelName(ctx context.Context, channelName string) ([]storage.Record, error)
-	Delete(ctx context.Context, record storage.Record) error
-}
-
+// TODO: Remove this extra layer, merge this to storage.Record.
 type Entry struct {
 	Token     string
 	Version   int
@@ -54,16 +47,16 @@ type RevokeRenamedResult struct {
 	LinkedChannelID  string
 }
 
-type Domain struct {
-	st Storage
+type TokenService struct {
+	ddb ddb
 }
 
-func NewDomain(st Storage) Domain {
-	return Domain{st: st}
+func NewTokenService(ddb ddb) TokenService {
+	return TokenService{ddb: ddb}
 }
 
-func (d *Domain) GetTokens(ctx context.Context, channelName string) ([]Entry, error) {
-	recs, err := d.st.QueryByChannelName(ctx, channelName)
+func (d *TokenService) GetTokens(ctx context.Context, channelName string) ([]Entry, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, channelName)
 	if err != nil {
 		return []Entry{}, err
 	}
@@ -81,8 +74,8 @@ func (d *Domain) GetTokens(ctx context.Context, channelName string) ([]Entry, er
 // VerifyToken checks given token and existin token. It returns VerifyResult.
 // Need to check the returned VerifyResult.NotFound and .Unmatch.
 // Returns an error when underlying storage goes wrong.
-func (d *Domain) VerifyToken(ctx context.Context, channelName string, givenToken string) (VerifyResult, error) {
-	recs, err := d.st.QueryByChannelName(ctx, channelName)
+func (d *TokenService) VerifyToken(ctx context.Context, channelName string, givenToken string) (VerifyResult, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, channelName)
 	if err != nil {
 		return VerifyResult{}, err
 	}
@@ -103,8 +96,8 @@ func (d *Domain) VerifyToken(ctx context.Context, channelName string, givenToken
 // GenerateAndSaveToken returns a GenerateResult which contains secure random string as token.
 // Then it saves the generated token to storage. This checks existing generated token in storage.
 // If found, returns the generated token.
-func (d *Domain) GenerateAndSaveToken(ctx context.Context, channelID string, channelName string) (GenerateResult, error) {
-	recs, err := d.st.QueryByChannelName(ctx, channelName)
+func (d *TokenService) GenerateAndSaveToken(ctx context.Context, channelID string, channelName string) (GenerateResult, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, channelName)
 	if err != nil {
 		return GenerateResult{}, err
 	}
@@ -127,7 +120,7 @@ func (d *Domain) GenerateAndSaveToken(ctx context.Context, channelID string, cha
 		Version:     0,
 		CreatedAt:   currentTimestamp(),
 	}
-	if err := d.st.Save(ctx, record); err != nil {
+	if err := d.ddb.Save(ctx, record); err != nil {
 		return GenerateResult{}, err
 	}
 
@@ -140,8 +133,8 @@ const maxTokenCount = 2
 // RegenerateToken allows generate another token for the given channel. If another
 // token has been already generated, it returns "too many token" result. So users
 // can have 2 tokens for each channel name maximum.
-func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelName string) (RegenerateResult, error) {
-	recs, err := d.st.QueryByChannelName(ctx, channelName)
+func (d *TokenService) RegenerateToken(ctx context.Context, channelID string, channelName string) (RegenerateResult, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, channelName)
 	if err != nil {
 		return RegenerateResult{}, err
 	}
@@ -167,14 +160,14 @@ func (d *Domain) RegenerateToken(ctx context.Context, channelID string, channelN
 		Version:     latestRec.Version + 1,
 		CreatedAt:   currentTimestamp(),
 	}
-	if err := d.st.Save(ctx, record); err != nil {
+	if err := d.ddb.Save(ctx, record); err != nil {
 		return RegenerateResult{}, err
 	}
 	return RegenerateResult{Token: token}, nil
 }
 
-func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken string) (RevokeResult, error) {
-	recs, err := d.st.QueryByChannelName(ctx, channelName)
+func (d *TokenService) RevokeToken(ctx context.Context, channelName string, givenToken string) (RevokeResult, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, channelName)
 	if err != nil {
 		return RevokeResult{}, err
 	}
@@ -184,7 +177,7 @@ func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken
 
 	for _, rec := range recs {
 		if rec.Token == givenToken {
-			if err := d.st.Delete(ctx, rec); err != nil {
+			if err := d.ddb.Delete(ctx, rec); err != nil {
 				return RevokeResult{}, err
 			}
 			// Success.
@@ -195,8 +188,8 @@ func (d *Domain) RevokeToken(ctx context.Context, channelName string, givenToken
 }
 
 // Revoke given token for the given channel name. If then token is not linked to another channel's id, treat as permission error.
-func (d *Domain) RevokeRenamedToken(ctx context.Context, channelID string, givenChannelName string, givenToken string) (RevokeRenamedResult, error) {
-	recs, err := d.st.QueryByChannelName(ctx, givenChannelName)
+func (d *TokenService) RevokeRenamedToken(ctx context.Context, channelID string, givenChannelName string, givenToken string) (RevokeRenamedResult, error) {
+	recs, err := d.ddb.QueryByChannelName(ctx, givenChannelName)
 	if err != nil {
 		return RevokeRenamedResult{}, err
 	}
@@ -210,7 +203,7 @@ func (d *Domain) RevokeRenamedToken(ctx context.Context, channelID string, given
 				return RevokeRenamedResult{ChannelIDUnmatch: true, LinkedChannelID: rec.ChannelID}, nil
 			}
 
-			if err := d.st.Delete(ctx, rec); err != nil {
+			if err := d.ddb.Delete(ctx, rec); err != nil {
 				return RevokeRenamedResult{}, err
 			}
 			// Success.
@@ -218,6 +211,14 @@ func (d *Domain) RevokeRenamedToken(ctx context.Context, channelID string, given
 		}
 	}
 	return RevokeRenamedResult{NotFound: true}, nil
+}
+
+type ddb interface {
+	Save(ctx context.Context, record storage.Record) error
+	// QueryByChannelName returns found records having the same channel name.
+	// It returns empty slice when no record found.
+	QueryByChannelName(ctx context.Context, channelName string) ([]storage.Record, error)
+	Delete(ctx context.Context, record storage.Record) error
 }
 
 type generator interface {

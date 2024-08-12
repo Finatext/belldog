@@ -1,11 +1,11 @@
-package domain
+package service
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
-	"github.com/Finatext/belldog/storage"
+	"github.com/Finatext/belldog/internal/storage"
 )
 
 type testStorage struct {
@@ -58,7 +58,7 @@ func TestGenerateAndSaveTokenNew(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	res, err := svc.GenerateAndSaveToken(ctx, channelID, channelName)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestGenerateAndSaveTokenAgain(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	resOld, err := svc.GenerateAndSaveToken(ctx, channelID, channelName)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestVerifyToken(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	rec := storage.Record{ChannelID: channelID, ChannelName: channelName, Token: token, Version: 1}
 	if err := stg.Save(ctx, rec); err != nil {
@@ -156,7 +156,7 @@ func TestVerifyTokenMultipleItems(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	rec := storage.Record{ChannelID: channelID, ChannelName: channelName, Token: token, Version: 1}
 	if err := stg.Save(ctx, rec); err != nil {
@@ -188,7 +188,7 @@ func TestRegenerateToken(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	// Case: no token saved.
 	res1, err := svc.RegenerateToken(ctx, channelID, channelName)
@@ -246,7 +246,7 @@ func TestRevokeToken(t *testing.T) {
 
 	ctx := context.Background()
 	stg := newTestStorage()
-	svc := NewDomain(&stg)
+	svc := NewTokenService(&stg)
 
 	res, err := svc.RevokeToken(ctx, channelName, token)
 	if err != nil {

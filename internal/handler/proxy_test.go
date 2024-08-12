@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"testing"
@@ -21,6 +21,7 @@ func TestPathRe(t *testing.T) {
 		t.Error("case 4 failed")
 	}
 
+	// TODO: Extract this test case to a separate test function.
 	t.Run("URL decode", func(t *testing.T) {
 		channelName, token, err := parsePath("/p/%E3%81%93%E3%82%93%E3%81%AB%E3%81%A1%E3%81%AF/xxxx")
 		if err != nil || channelName != "こんにちは" || token != "xxxx" {
