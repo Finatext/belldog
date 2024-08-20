@@ -38,7 +38,6 @@ func doMain() error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
 	slog.SetDefault(logger)
 
-	var config appconfig.Config
 	awsConfig, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to load AWS config")
@@ -48,11 +47,12 @@ func doMain() error {
 	if err != nil {
 		return err
 	}
+	var config appconfig.Config
 	envconfigConfig := envconfig.Config{
 		Target:   &config,
 		Lookuper: envconfig.MapLookuper(replacedEnv),
 	}
-	if err := envconfig.Process(ctx, envconfigConfig); err != nil {
+	if err := envconfig.ProcessWith(ctx, &envconfigConfig); err != nil {
 		return errors.Wrap(err, "failed to process envconfig")
 	}
 
