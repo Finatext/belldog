@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/errors"
 
 	"github.com/Finatext/belldog/internal/storage"
 )
@@ -33,7 +34,7 @@ func (t *testStorage) QueryByChannelName(ctx context.Context, channelName string
 func (t *testStorage) Delete(ctx context.Context, rec storage.Record) error {
 	recs, ok := t.m[rec.ChannelName]
 	if !ok {
-		return fmt.Errorf("No record found for %s", rec.ChannelName)
+		return errors.Newf("No record found for %s", rec.ChannelName)
 	}
 
 	for i, v := range recs {

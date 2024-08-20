@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/cockroachdb/errors"
 )
 
 type httpResponseWriter struct {
@@ -33,7 +34,11 @@ func (w *httpResponseWriter) Header() http.Header {
 }
 
 func (w *httpResponseWriter) Write(p []byte) (int, error) {
-	return w.writer.Write(p)
+	b, err := w.writer.Write(p)
+	if err != nil {
+		return b, errors.Wrap(err, "failed to write response")
+	}
+	return b, nil
 }
 
 func (w *httpResponseWriter) WriteHeader(statusCode int) {
@@ -62,7 +67,7 @@ func Wrap(handler http.Handler) func(context.Context, events.LambdaFunctionURLRe
 		ctx = context.WithValue(ctx, requestContextKey{}, request)
 		httpRequest, err := http.NewRequestWithContext(ctx, request.RequestContext.HTTP.Method, url, body)
 		if err != nil {
-			return events.LambdaFunctionURLResponse{}, err
+			return events.LambdaFunctionURLResponse{}, errors.Wrap(err, "failed to create http request")
 		}
 		httpRequest.RemoteAddr = request.RequestContext.HTTP.SourceIP
 		for k, v := range request.Headers {
