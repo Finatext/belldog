@@ -1,42 +1,47 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 
-	"github.com/Finatext/belldog/internal/slack"
 	"github.com/cockroachdb/errors"
+	"github.com/labstack/echo/v4"
+
+	"github.com/Finatext/belldog/internal/slack"
 )
 
-func (h *ProxyHandler) handleWebhook(ctx context.Context, req Request, body []byte) (Response, error) {
-	channelName, token, err := parsePath(req.RawPath)
-	if err != nil {
-		slog.InfoContext(ctx, "Invalid request path given, response bad request", slog.String("error", err.Error()))
-		return Response{Body: "Invalid request path\n", StatusCode: http.StatusBadRequest}, nil
-	}
+func (h *ProxyHandler) Webhook(c echo.Context) error {
+	ctx := c.Request().Context()
+	channelName := c.Param("channel_name")
+	token := c.Param("token")
 
 	res, err := h.tokenSvc.VerifyToken(ctx, channelName, token)
 	if err != nil {
-		return Response{}, err
+		return err
 	}
+
 	if res.NotFound {
 		slog.InfoContext(ctx, "No token generated, response not found", slog.String("channel_name", channelName))
 		msg := fmt.Sprintf("No token generated for %s, generate token with `%s` slash command.\n", channelName, cmdGenerate)
-		return Response{Body: msg, StatusCode: http.StatusNotFound}, nil
+		return c.String(http.StatusNotFound, msg)
 	}
 	if res.Unmatch {
 		slog.InfoContext(ctx, "Invalid token given, response unauthorized", slog.String("channel_name", channelName), slog.String("token", token))
-		return Response{Body: "Invalid token given. Check generated URL.\n", StatusCode: http.StatusUnauthorized}, nil
+		return c.String(http.StatusUnauthorized, "Invalid token given. Check generated URL.\n")
 	}
 
-	payload, err := parseRequestBody(req, body)
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read request body")
+	}
+	payload, err := parseRequestBody(c.Request(), body)
 	if err != nil {
 		slog.InfoContext(ctx, "parseRequestBody failed, response bad request", slog.String("error", err.Error()), slog.String("body", string(body)))
-		return Response{Body: "Invalid body given. JSON Unmarshal failed.\n", StatusCode: http.StatusBadRequest}, nil
+		return c.String(http.StatusBadRequest, "Invalid body given. JSON Unmarshal failed.\n")
 	}
 
 	result, err := h.slackClient.PostMessage(ctx, res.ChannelID, res.ChannelName, payload)
@@ -47,8 +52,8 @@ func (h *ProxyHandler) handleWebhook(ctx context.Context, req Request, body []by
 			slog.String("channel_name", res.ChannelName),
 			slog.Int("body size", len(body)),
 		)
-		slog.DebugContext(ctx, "debug PostMessage failed", slog.String("body", string(body)))
-		return Response{}, err
+		slog.DebugContext(ctx, "failed PostMessage body", slog.String("body", string(body)))
+		return err
 	}
 
 	switch result.Type {
@@ -57,28 +62,28 @@ func (h *ProxyHandler) handleWebhook(ctx context.Context, req Request, body []by
 			slog.String("channel_id", res.ChannelID),
 			slog.String("channel_name", res.ChannelName),
 		)
-		return Response{Body: "ok.\n", StatusCode: http.StatusOK}, nil
+		return c.String(http.StatusOK, "ok.\n")
 	case slack.PostMessageResultServerTimeoutFailure:
 		slog.WarnContext(ctx, "PostMessage timeout",
 			slog.String("channel_id", res.ChannelID),
 			slog.String("channel_name", res.ChannelName),
 		)
-		return Response{Body: "Slack API timeout.\n", StatusCode: http.StatusGatewayTimeout}, nil
+		return c.String(http.StatusGatewayTimeout, "Slack API timeout.\n")
 	case slack.PostMessageResultServerFailure:
 		msg := fmt.Sprintf("Slack API error: status=%d, body=%s\n", result.StatusCode, result.Body)
 		if result.StatusCode >= 500 && result.StatusCode < 600 {
 			slog.WarnContext(ctx, "PostMessage server error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
-			return Response{Body: msg, StatusCode: http.StatusBadGateway}, nil
+			return c.String(http.StatusBadGateway, msg)
 		} else if result.StatusCode >= 400 && result.StatusCode < 500 {
 			slog.InfoContext(ctx, "PostMessage client error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
-			return Response{Body: msg, StatusCode: result.StatusCode}, nil
+			return c.String(result.StatusCode, msg)
 		} else {
-			return Response{}, fmt.Errorf("unexpected status code from Slack API: code=%d, body=%s", result.StatusCode, result.Body)
+			return errors.Newf("unexpected status code from Slack API: code=%d, body=%s", result.StatusCode, result.Body)
 		}
 	case slack.PostMessageResultDomainFailure:
 		if result.Reason == "channel_not_found" {
 			msg := fmt.Sprintf("invite bot to the channel: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
-			return Response{Body: msg, StatusCode: http.StatusBadRequest}, nil
+			return c.String(http.StatusBadRequest, msg)
 		} else {
 			slog.WarnContext(ctx, "PostMessage Slack API responses error response",
 				slog.String("channel_id", res.ChannelID),
@@ -86,11 +91,10 @@ func (h *ProxyHandler) handleWebhook(ctx context.Context, req Request, body []by
 				slog.String("reason", result.Reason),
 			)
 			msg := fmt.Sprintf("Slack API responses error: reason=%s", result.Reason)
-			return Response{Body: msg, StatusCode: http.StatusBadRequest}, nil
+			return c.String(http.StatusBadRequest, msg)
 		}
-	// Check this in lint phase, not in runtime.
 	default:
-		return Response{}, fmt.Errorf("unexpected PostMessageResult type: %v", result.Type)
+		return errors.Newf("unexpected PostMessageResult type: %v", result.Type)
 	}
 }
 
@@ -100,9 +104,9 @@ func (h *ProxyHandler) handleWebhook(ctx context.Context, req Request, body []by
 // encoded as form-data, the JSON payload will be at `payload` key.
 //
 // This behavior is not documented now. Some old clients needs this behavior.
-func parseRequestBody(req Request, body []byte) (map[string]interface{}, error) {
-	contentType, ok := req.Headers["content-type"]
-	if ok && contentType == "application/x-www-form-urlencoded" {
+func parseRequestBody(req *http.Request, body []byte) (map[string]interface{}, error) {
+	contentType, ok := req.Header[http.CanonicalHeaderKey("content-type")]
+	if ok && contains(contentType, "application/x-www-form-urlencoded") {
 		b, err := extractPayloadValue(body)
 		if err != nil {
 			return nil, err
@@ -143,4 +147,13 @@ func extractPayloadValue(body []byte) ([]byte, error) {
 		return nil, errors.Newf("the HTTP query `payload` value must be a single value: len=%d", len(v))
 	}
 	return []byte(v[0]), nil
+}
+
+func contains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }

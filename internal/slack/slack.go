@@ -249,18 +249,28 @@ const (
 )
 
 // https://api.slack.com/authentication/verifying-requests-from-slack
-func VerifySlackRequest(ctx context.Context, key string, headers map[string]string, body string) bool {
-	givenSig, ok := headers["x-slack-signature"]
+func VerifySlackRequest(ctx context.Context, key string, headers http.Header, body string) bool {
+	givenSigs, ok := headers[http.CanonicalHeaderKey("x-slack-signature")]
 	if !ok {
 		slog.InfoContext(ctx, "missing x-slack-signature header")
 		return false
 	}
+	if len(givenSigs) < 1 {
+		slog.InfoContext(ctx, "empty x-slack-signature header")
+		return false
+	}
+	givenSig := givenSigs[0]
 
-	timestampStr, ok := headers["x-slack-request-timestamp"]
+	timestampStrs, ok := headers[http.CanonicalHeaderKey("x-slack-request-timestamp")]
 	if !ok {
 		slog.InfoContext(ctx, "missing x-slack-request-timestamp header")
 		return false
 	}
+	if len(timestampStrs) < 1 {
+		slog.InfoContext(ctx, "empty x-slack-request-timestamp header")
+		return false
+	}
+	timestampStr := timestampStrs[0]
 	timestamp, err := strconv.ParseInt(timestampStr, base, bitSize)
 	if err != nil {
 		slog.InfoContext(ctx, "failed to parse timestamp", slog.String("error", err.Error()), slog.String("timestamp", timestampStr))

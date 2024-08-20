@@ -48,9 +48,17 @@ Belldog recommends 2 individual Lambda functions to work.
 - Tokens are owned by the linked channel. One can revoke a token only in the channel in which the token had been generated.
 
 ### Environment Variables
+Secrets should be stored at secure locations like AWS SSM Parameter Store. Use `ssm://<paramter_key>` as environment variable value to let Belldog
+to retrive secret values from Parameter Store. The paramter key must contain the starting slash character (`/`).
+
 - `DDB_TABLE_NAME`: DynamoDB table name.
 - `MODE`: Switch proxy mode and batch mode in the start-up process.
 - `OPS_NOTIFICATION_CHANNEL_NAME`: Slack channel name to notify token migrations and channel renamings to Ops.
+- `SLACK_TOKEN`: Slack Bot User OAuth Token.
+- `SLACK_SIGNING_SECRET`: https://api.slack.com/authentication/verifying-requests-from-slack
+
+Deprecated:
+
 - `PARAMETER_NAME_SLACK_TOKEN`: AWS SSM parameter store key to get Slack Bot User OAuth Token.
 - `PARAMETER_NAME_SLACK_SIGNING_SECRET`: https://api.slack.com/authentication/verifying-requests-from-slack
 
@@ -106,15 +114,6 @@ Estimate average item size: 100-150 bytes.
 Currently only `x86_64` architecture is supported.
 
 ## Development
-### Code structure
-```
-main(proxy mode) -> domain -> storage
-  ↳ slack
-
-main(batch mode) -> storage
-  ↳ slack
-```
-
 ### Upgrade Go version
 - `go.mod`
 - `Dockerfile`
