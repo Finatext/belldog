@@ -32,7 +32,6 @@ func doMain() error {
 	logLevel := new(slog.LevelVar)
 	slog.SetDefault(slog.New(console.NewHandler(os.Stderr, &console.HandlerOptions{Level: logLevel})))
 
-	var config appconfig.Config
 	awsConfig, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to load AWS config")
@@ -42,6 +41,7 @@ func doMain() error {
 	if err != nil {
 		return err
 	}
+	var config appconfig.Config
 	envconfigConfig := envconfig.Config{
 		Target:   &config,
 		Lookuper: envconfig.MapLookuper(replacedEnv),
