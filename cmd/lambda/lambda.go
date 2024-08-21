@@ -66,7 +66,7 @@ func doMain() error {
 		}
 		config.SlackToken = token
 	}
-	if config.ParameterNameSlackSigningSecret == "" {
+	if config.ParameterNameSlackSigningSecret != "" {
 		slog.Warn("PARAMETER_NAME_SLACK_SIGNING_SECRET is deprecated, use SLACK_SIGNING_SECRET instead")
 		secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
 		if err != nil {
