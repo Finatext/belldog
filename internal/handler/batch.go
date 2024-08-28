@@ -37,20 +37,55 @@ func (h *BatchHandler) HandleCloudWatchEvent(ctx context.Context, _ events.Cloud
 }
 
 func (h *BatchHandler) handleWithErrorLogging(ctx context.Context) error {
-	recs, err := h.ddb.ScanAll(ctx)
+	olds, err := h.ddb.ScanAll(ctx)
 	if err != nil {
 		return err
 	}
+	slog.InfoContext(ctx, "target record size", slog.Int("size", len(olds)))
 
 	channels, err := h.slackClient.GetAllChannels(ctx)
 	if err != nil {
 		return err
 	}
+	slog.InfoContext(ctx, "target channel size", slog.Int("size", len(channels)))
+
+	// Check channel is_archived.
+	var archived []archiveEvent
+	recs := make([]storage.Record, 0, len(olds))
+	for _, rec := range olds {
+		isArchived := false
+		for _, channel := range channels {
+			if rec.ChannelID == channel.ID {
+				slog.DebugContext(ctx, "channel", slog.String("channel_id", rec.ChannelID), slog.String("channel_name", rec.ChannelName), slog.String("slack_channel_name", channel.Name))
+
+				if channel.IsArchived {
+					isArchived = true
+					event := archiveEvent{record: rec, SlackChannelName: channel.Name}
+					archived = append(archived, event) //nolint:staticcheck // false positive of append
+				}
+				break
+			}
+		}
+		if !isArchived {
+			recs = append(recs, rec)
+		}
+	}
+
+	slog.InfoContext(ctx, "processing archived channels", slog.Int("size", len(archived)))
+	for _, event := range archived {
+		slog.InfoContext(ctx, "Channel is archived, deleting", slog.String("channel_id", event.record.ChannelID), slog.String("record_channel_name", event.record.ChannelName), slog.String("slack_channel_name", event.SlackChannelName))
+		msg := fmt.Sprintf("Channel is archived, deleting record: channel_id=%s, record_channel_name=%s, slack_channel_name=%s\n", event.record.ChannelID, event.record.ChannelName, event.SlackChannelName)
+		if err := h.notifyOps(ctx, msg); err != nil {
+			return err
+		}
+		if err := h.ddb.Delete(ctx, event.record); err != nil {
+			return err
+		}
+	}
 
 	migrations := make(map[string]storage.Record)
 	var renames []renameEvent
 
-	slog.InfoContext(ctx, "target record size", slog.Int("size", len(recs)))
 	for _, rec := range recs {
 		name := rec.ChannelName
 		// Check token is in migration.
@@ -114,9 +149,11 @@ func (h *BatchHandler) notify(ctx context.Context, channelID string, channelName
 			return e
 		}
 	}
-	payloadOps := map[string]interface{}{"text": msgOps}
-	// kit.PostMessage can accept channel name as channel id.
-	result, err := h.slackClient.PostMessage(ctx, h.cfg.OpsNotificationChannelName, h.cfg.OpsNotificationChannelName, payloadOps)
+	return h.notifyOps(ctx, msgOps)
+}
+
+func (h *BatchHandler) notifyOps(ctx context.Context, msg string) error {
+	result, err := h.slackClient.PostMessage(ctx, h.cfg.OpsNotificationChannelName, h.cfg.OpsNotificationChannelName, map[string]interface{}{"text": msg})
 	if err != nil {
 		return err
 	}
@@ -131,6 +168,11 @@ type renameEvent struct {
 	oldName    string
 	newName    string
 	savedToken string
+}
+
+type archiveEvent struct {
+	record           storage.Record
+	SlackChannelName string
 }
 
 func handlePostMessageFailure(result slack.PostMessageResult) error {
