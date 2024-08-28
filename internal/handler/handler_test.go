@@ -8,6 +8,7 @@ import (
 
 	"github.com/Finatext/belldog/internal/service"
 	"github.com/Finatext/belldog/internal/slack"
+	"github.com/Finatext/belldog/internal/storage"
 )
 
 type mockSlackClient struct {
@@ -61,4 +62,28 @@ func (m *mockTokenService) GetTokens(ctx context.Context, channelName string) ([
 func (m *mockTokenService) RegenerateToken(ctx context.Context, channelID string, channelName string) (service.RegenerateResult, error) {
 	args := m.Called(ctx, channelID, channelName)
 	return args.Get(0).(service.RegenerateResult), args.Error(1)
+}
+
+type mockStorageDDB struct {
+	mock.Mock
+}
+
+func (m *mockStorageDDB) Save(ctx context.Context, rec storage.Record) error {
+	args := m.Called(ctx, rec)
+	return args.Error(0)
+}
+
+func (m *mockStorageDDB) QueryByChannelName(ctx context.Context, channelName string) ([]storage.Record, error) {
+	args := m.Called(ctx, channelName)
+	return args.Get(0).([]storage.Record), args.Error(1)
+}
+
+func (m *mockStorageDDB) Delete(ctx context.Context, rec storage.Record) error {
+	args := m.Called(ctx, rec)
+	return args.Error(0)
+}
+
+func (m *mockStorageDDB) ScanAll(ctx context.Context) ([]storage.Record, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]storage.Record), args.Error(1)
 }

@@ -142,7 +142,7 @@ func handlePostMessageFailure(result slack.PostMessageResult) error {
 	case slack.PostMessageResultServerFailure:
 		return errors.Newf("slack server error: code=%d, body=%s", result.StatusCode, result.Body)
 	case slack.PostMessageResultAPIFailure:
-		return errors.Newf("slack domain error: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
+		return errors.Newf("slack API error: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
 	default:
 		return errors.Newf("unknown PostMessageResult type: %d", result.Type)
 	}
