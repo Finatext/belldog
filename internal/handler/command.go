@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Finatext/belldog/internal/slack"
 	"github.com/cockroachdb/errors"
 	"github.com/labstack/echo/v4"
+
+	"github.com/Finatext/belldog/internal/slack"
 )
 
 const (
