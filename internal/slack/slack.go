@@ -164,10 +164,9 @@ func (s *Client) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 	for {
 		// https://api.slack.com/docs/pagination
 		param := slack.GetConversationsParameters{
-			Cursor:          cursor,
-			ExcludeArchived: true,
-			Limit:           slackPaginationLimit,
-			Types:           []string{"public_channel", "private_channel"},
+			Cursor: cursor,
+			Limit:  slackPaginationLimit,
+			Types:  []string{"public_channel", "private_channel"},
 		}
 		chans, next, err := client.GetConversationsContext(ctx, &param)
 		if err != nil {

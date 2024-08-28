@@ -128,3 +128,115 @@ func TestBatchRename(t *testing.T) {
 	require.NoError(t, err)
 	slackClient.AssertExpectations(t)
 }
+
+func TestBatchArchived(t *testing.T) {
+	channelID := "C123456"
+	channelName := "test"
+	arcvhiedChannelID := "C789012"
+	arcvhiedChannelName := "archived"
+
+	cfg := defaultConfig
+	slackClient := &mockSlackClient{}
+	ddb := &mockStorageDDB{}
+
+	rec := storage.Record{
+		ChannelID:   arcvhiedChannelID,
+		ChannelName: arcvhiedChannelName,
+		Token:       "token_b",
+	}
+	ddb.On("ScanAll", mock.Anything).Return([]storage.Record{
+		{
+			ChannelID:   channelID,
+			ChannelName: channelName,
+			Token:       "token_a",
+		},
+		rec,
+	}, nil)
+	slackClient.On("GetAllChannels", mock.Anything).Return([]slackgo.Channel{
+		{
+			GroupConversation: slackgo.GroupConversation{
+				Name: channelName,
+				Conversation: slackgo.Conversation{
+					ID: channelID,
+				},
+			},
+		},
+		{
+			GroupConversation: slackgo.GroupConversation{
+				IsArchived: true,
+				Name:       arcvhiedChannelName,
+				Conversation: slackgo.Conversation{
+					ID: arcvhiedChannelID,
+				},
+			},
+		},
+	}, nil)
+	ddb.On("Delete", mock.Anything, rec).Return(nil)
+
+	messageMatcher := mock.MatchedBy(func(payload map[string]interface{}) bool {
+		return payload["text"].(string) == "Channel is archived, deleting record: channel_id=C789012, record_channel_name=archived, slack_channel_name=archived\n"
+	})
+	slackClient.On("PostMessage", mock.Anything, cfg.OpsNotificationChannelName, cfg.OpsNotificationChannelName, messageMatcher).Return(slack.PostMessageResult{}, nil)
+
+	h := NewBatchHandler(cfg, slackClient, ddb)
+	err := h.HandleCloudWatchEvent(context.Background(), events.CloudWatchEvent{})
+	require.NoError(t, err)
+	slackClient.AssertExpectations(t)
+	ddb.AssertExpectations(t)
+}
+
+func TestBatchRenameArchived(t *testing.T) {
+	channelID := "C123456"
+	channelName := "test"
+	arcvhiedChannelID := "C789012"
+	arcvhiedChannelName := "archived"
+
+	cfg := defaultConfig
+	slackClient := &mockSlackClient{}
+	ddb := &mockStorageDDB{}
+
+	rec := storage.Record{
+		ChannelID:   arcvhiedChannelID,
+		ChannelName: arcvhiedChannelName,
+		Token:       "token_b",
+	}
+	ddb.On("ScanAll", mock.Anything).Return([]storage.Record{
+		{
+			ChannelID:   channelID,
+			ChannelName: channelName,
+			Token:       "token_a",
+		},
+		rec,
+	}, nil)
+	slackClient.On("GetAllChannels", mock.Anything).Return([]slackgo.Channel{
+		{
+			GroupConversation: slackgo.GroupConversation{
+				Name: channelName,
+				Conversation: slackgo.Conversation{
+					ID: channelID,
+				},
+			},
+		},
+		{
+			GroupConversation: slackgo.GroupConversation{
+				IsArchived: true,
+				Name:       "renamed_and_archived",
+				Conversation: slackgo.Conversation{
+					ID: arcvhiedChannelID,
+				},
+			},
+		},
+	}, nil)
+	ddb.On("Delete", mock.Anything, rec).Return(nil)
+
+	messageMatcher := mock.MatchedBy(func(payload map[string]interface{}) bool {
+		return payload["text"].(string) == "Channel is archived, deleting record: channel_id=C789012, record_channel_name=archived, slack_channel_name=renamed_and_archived\n"
+	})
+	slackClient.On("PostMessage", mock.Anything, cfg.OpsNotificationChannelName, cfg.OpsNotificationChannelName, messageMatcher).Return(slack.PostMessageResult{}, nil)
+
+	h := NewBatchHandler(cfg, slackClient, ddb)
+	err := h.HandleCloudWatchEvent(context.Background(), events.CloudWatchEvent{})
+	require.NoError(t, err)
+	slackClient.AssertExpectations(t)
+	ddb.AssertExpectations(t)
+}
