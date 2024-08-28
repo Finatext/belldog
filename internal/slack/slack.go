@@ -15,10 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/slack-go/slack"
+
+	"github.com/Finatext/belldog/internal/appconfig"
 )
 
 const (
@@ -44,10 +45,13 @@ type PostMessageResult struct {
 	Type PostMessageResultType
 	// Only when Type is ServerFailure
 	StatusCode int
-	Body       string
-	// Only when Type is DomainFailure
-	Reason      string
-	ChannelID   string
+	// Only when Type is ServerFailure
+	Body string
+	// Only when Type is APIFailure
+	Reason string
+	// Only when Type is APIFailure
+	ChannelID string
+	// Only when Type is APIFailure
 	ChannelName string
 }
 
@@ -57,7 +61,7 @@ const (
 	PostMessageResultOK PostMessageResultType = iota
 	PostMessageResultServerTimeoutFailure
 	PostMessageResultServerFailure
-	PostMessageResultDomainFailure
+	PostMessageResultAPIFailure
 )
 
 type Client struct {
@@ -133,7 +137,7 @@ func (s Client) PostMessage(ctx context.Context, channelID string, channelName s
 
 	if !res.Ok {
 		return PostMessageResult{
-			Type:        PostMessageResultDomainFailure,
+			Type:        PostMessageResultAPIFailure,
 			Reason:      res.Error,
 			ChannelID:   channelID,
 			ChannelName: channelName,

@@ -80,7 +80,7 @@ func (h *ProxyHandler) Webhook(c echo.Context) error {
 		} else {
 			return errors.Newf("unexpected status code from Slack API: code=%d, body=%s", result.StatusCode, result.Body)
 		}
-	case slack.PostMessageResultDomainFailure:
+	case slack.PostMessageResultAPIFailure:
 		if result.Reason == "channel_not_found" {
 			msg := fmt.Sprintf("invite bot to the channel: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
 			return c.String(http.StatusBadRequest, msg)
