@@ -58,23 +58,6 @@ func doMain() error {
 
 	logLevel.Set(config.GoLog)
 
-	if config.ParameterNameSlackToken != "" {
-		slog.Warn("PARAMETER_NAME_SLACK_TOKEN is deprecated, use SLACK_TOKEN instead")
-		token, err := fetchParamter(ctx, config.ParameterNameSlackToken)
-		if err != nil {
-			return err
-		}
-		config.SlackToken = token
-	}
-	if config.ParameterNameSlackSigningSecret != "" {
-		slog.Warn("PARAMETER_NAME_SLACK_SIGNING_SECRET is deprecated, use SLACK_SIGNING_SECRET instead")
-		secret, err := fetchParamter(ctx, config.ParameterNameSlackSigningSecret)
-		if err != nil {
-			return err
-		}
-		config.SlackSigningSecret = secret
-	}
-
 	slackClient := slack.NewClient(config)
 	ddb, err := storage.NewDDB(ctx, awsConfig, config.DdbTableName)
 	if err != nil {
@@ -93,27 +76,4 @@ func doMain() error {
 		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}
 	return nil
-}
-
-func fetchParamter(ctx context.Context, paramName string) (string, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to load AWS config")
-	}
-	client := ssm.NewFromConfig(cfg)
-	t := true
-	input := &ssm.GetParameterInput{
-		Name:           &paramName,
-		WithDecryption: &t,
-	}
-	res, err := client.GetParameter(ctx, input)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get SSM parameter")
-	}
-
-	value := *res.Parameter.Value
-	if value == "" {
-		return "", errors.Newf("empty SSM parameter value found: %s", paramName)
-	}
-	return value, nil
 }
