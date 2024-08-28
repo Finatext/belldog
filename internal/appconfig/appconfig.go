@@ -16,8 +16,8 @@ type Config struct {
 	GoLog                      slog.Level    `env:"GO_LOG, default=info"`
 	Mode                       string        `env:"MODE, required"`
 	OpsNotificationChannelName string        `env:"OPS_NOTIFICATION_CHANNEL_NAME, required"`
-	SlackSigningSecret         string        `env:"SLACK_SIGNING_SECRET"`
-	SlackToken                 string        `env:"SLACK_TOKEN"`
+	SlackSigningSecret         string        `env:"SLACK_SIGNING_SECRET, required"`
+	SlackToken                 string        `env:"SLACK_TOKEN, required"`
 	RetryMax                   int           `env:"RETRY_MAX, default=3"`
 	RetryReadTimeoutDuration   time.Duration `env:"RETRY_READ_TIMEOUT_DURATION, default=5s"`
 	RetryWaitMaxDuration       time.Duration `env:"RETRY_WAIT_MAX_DURATION, default=10s"`
