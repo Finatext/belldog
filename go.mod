@@ -1,8 +1,9 @@
 module github.com/Finatext/belldog
 
-go 1.23
+go 1.23.0
 
 require (
+	github.com/Finatext/ssmenv-go v0.1.0
 	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.30.5
 	github.com/aws/aws-sdk-go-v2/config v1.27.33
