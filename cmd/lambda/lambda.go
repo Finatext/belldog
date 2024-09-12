@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Finatext/lambdaurl-buffered"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
-	"github.com/Finatext/belldog/internal/lambdaurl"
 	"github.com/Finatext/belldog/internal/service"
 	"github.com/Finatext/belldog/internal/slack"
 	"github.com/Finatext/belldog/internal/storage"
