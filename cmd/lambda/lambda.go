@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/caarlos0/env/v11"
 	"github.com/cockroachdb/errors"
-	"github.com/sethvargo/go-envconfig"
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
@@ -47,13 +47,11 @@ func doMain() error {
 	if err != nil {
 		return err
 	}
-	var config appconfig.Config
-	envconfigConfig := envconfig.Config{
-		Target:   &config,
-		Lookuper: envconfig.MapLookuper(replacedEnv),
-	}
-	if err := envconfig.ProcessWith(ctx, &envconfigConfig); err != nil {
-		return errors.Wrap(err, "failed to process envconfig")
+	config, err := env.ParseAsWithOptions[appconfig.Config](env.Options{
+		Environment: replacedEnv,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to process config from env")
 	}
 
 	logLevel.Set(config.GoLog)
