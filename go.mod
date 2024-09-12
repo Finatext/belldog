@@ -9,11 +9,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.15.3
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.34.9
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.8
+	github.com/caarlos0/env/v11 v11.2.2
 	github.com/cockroachdb/errors v1.11.3
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/phsym/console-slog v0.3.1
-	github.com/sethvargo/go-envconfig v1.1.0
 	github.com/slack-go/slack v0.14.0
 	github.com/stretchr/testify v1.9.0
 )
@@ -38,6 +38,7 @@ require (
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
