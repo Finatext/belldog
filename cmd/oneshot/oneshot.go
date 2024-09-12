@@ -16,8 +16,8 @@ import (
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
 	"github.com/Finatext/belldog/internal/slack"
-	"github.com/Finatext/belldog/internal/ssmenv"
 	"github.com/Finatext/belldog/internal/storage"
+	"github.com/Finatext/ssmenv-go"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func doMain() error {
 	ssmClient := ssm.NewFromConfig(awsConfig)
 	replacedEnv, err := ssmenv.ReplacedEnv(ctx, ssmClient, os.Environ())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to replace env")
 	}
 	config, err := env.ParseAsWithOptions[appconfig.Config](env.Options{
 		Environment: replacedEnv,

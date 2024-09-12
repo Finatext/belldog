@@ -1,3 +1,5 @@
+github.com/Finatext/ssmenv-go v0.1.0 h1:dgSsrx1l26HuiiI5xzOVEIdUE+/GJtcHhbFdJzb+khQ=
+github.com/Finatext/ssmenv-go v0.1.0/go.mod h1:bPMbAiACozllI+O+TX25KUI2WnYgd581y9Dp4WrGFDA=
 github.com/aws/aws-lambda-go v1.47.0 h1:0H8s0vumYx/YKs4sE7YM0ktwL2eWse+kfopsRI1sXVI=
 github.com/aws/aws-lambda-go v1.47.0/go.mod h1:dpMpZgvWx5vuQJfBt0zqBha60q7Dd7RfgJv23DymV8A=
 github.com/aws/aws-sdk-go-v2 v1.30.5 h1:mWSRTwQAb0aLE17dSzztCVJWI9+cRMgqebndjwDyK0g=
