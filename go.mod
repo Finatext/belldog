@@ -7,7 +7,7 @@ require (
 	github.com/Finatext/ssmenv-go v0.1.0
 	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.30.5
-	github.com/aws/aws-sdk-go-v2/config v1.27.33
+	github.com/aws/aws-sdk-go-v2/config v1.27.34
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.15.3
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.34.9
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.8
