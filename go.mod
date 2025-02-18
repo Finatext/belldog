@@ -8,8 +8,8 @@ require (
 	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.36.1
 	github.com/aws/aws-sdk-go-v2/config v1.29.6
-	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.18.3
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.40.0
+	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.18.4
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.40.1
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.12
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/cockroachdb/errors v1.11.3
