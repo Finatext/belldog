@@ -22,6 +22,7 @@ env:
 
 jobs:
   test:
+    timeout-minutes: 10
     if: github.event.pull_request.draft == false
     name: Run test
     runs-on: ubuntu-latest
@@ -39,6 +40,7 @@ jobs:
   #   - https://docs.github.com/en/actions/publishing-packages/publishing-docker-images#publishing-images-to-github-packages
   #   - https://github.com/docker/metadata-action#semver
   build-and-push-image:
+    timeout-minutes: 15
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request'
     needs:
       - test
