@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
@@ -38,7 +36,7 @@ func NewEchoHandler(cfg appconfig.Config, slackClient slackClient, svc tokenServ
 
 func addCacheControlHeader(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		c.Response().Header().Set(http.CanonicalHeaderKey("cache-control"), "no-store, no-cache")
+		c.Response().Header().Set("cache-control", "no-store, no-cache")
 		return next(c)
 	}
 }

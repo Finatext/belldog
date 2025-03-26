@@ -91,7 +91,7 @@ type slackPostMessageResponse struct {
 }
 
 // https://api.slack.com/methods/chat.postMessage
-func (s Client) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) (PostMessageResult, error) {
+func (s *Client) PostMessage(ctx context.Context, channelID string, channelName string, payload map[string]interface{}) (PostMessageResult, error) {
 	payload["channel"] = channelID
 	jsonStr, err := json.Marshal(payload)
 	if err != nil {
@@ -176,7 +176,6 @@ func (s *Client) GetAllChannels(ctx context.Context) ([]slack.Channel, error) {
 				case <-ctx.Done():
 					err = ctx.Err()
 				case <-time.After(e.RetryAfter):
-					err = nil
 					continue
 				}
 			}
