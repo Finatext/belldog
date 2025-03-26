@@ -41,7 +41,7 @@ func requestLoggerFunc(c echo.Context, v middleware.RequestLoggerValues) error {
 		slog.Int("status", v.Status),
 		slog.String("authority", v.Host),
 		slog.String("request_id", v.RequestID),
-		slog.String("latency", fmt.Sprintf("%s", v.Latency)),
+		slog.String("latency", v.Latency.String()),
 		slog.Int64("response_size", v.ResponseSize),
 		slog.String("user_agent", v.UserAgent),
 		slog.String("remote_ip", v.RemoteIP),
