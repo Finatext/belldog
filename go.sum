@@ -2,8 +2,8 @@ github.com/Finatext/lambdaurl-buffered v0.1.0 h1:lfJnnforPMSSQBq6FtRkbKlOyulJga9
 github.com/Finatext/lambdaurl-buffered v0.1.0/go.mod h1:ibD9Krs8PLvWD4YZXinP9WAx/OTtHOLpS2jgfXTSK8s=
 github.com/Finatext/ssmenv-go v0.1.0 h1:dgSsrx1l26HuiiI5xzOVEIdUE+/GJtcHhbFdJzb+khQ=
 github.com/Finatext/ssmenv-go v0.1.0/go.mod h1:bPMbAiACozllI+O+TX25KUI2WnYgd581y9Dp4WrGFDA=
-github.com/aws/aws-lambda-go v1.48.0 h1:1aZUYsrJu0yo5fC4z+Rba1KhNImXcJcvHu763BxoyIo=
-github.com/aws/aws-lambda-go v1.48.0/go.mod h1:dpMpZgvWx5vuQJfBt0zqBha60q7Dd7RfgJv23DymV8A=
+github.com/aws/aws-lambda-go v1.49.0 h1:z4VhTqkFZPM3xpEtTqWqRqsRH4TZBMJqTkRiBPYLqIQ=
+github.com/aws/aws-lambda-go v1.49.0/go.mod h1:dpMpZgvWx5vuQJfBt0zqBha60q7Dd7RfgJv23DymV8A=
 github.com/aws/aws-sdk-go-v2 v1.36.3 h1:mJoei2CxPutQVxaATCzDUjcZEjVRdpsiiXi2o38yqWM=
 github.com/aws/aws-sdk-go-v2 v1.36.3/go.mod h1:LLXuLpgzEbD766Z5ECcRmi8AzSwfZItDtmABVkRLGzg=
 github.com/aws/aws-sdk-go-v2/config v1.29.14 h1:f+eEi/2cKCg9pqKBoAIwRGzVb70MRKqWX4dg1BDcSJM=
