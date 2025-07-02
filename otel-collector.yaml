@@ -1,0 +1,37 @@
+# Alternative config can be injected via `OPENTELEMETRY_COLLECTOR_CONFIG_URI` env var.
+extensions:
+  sigv4auth:
+    service: "aps"
+    region: "ap-northeast-1"
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "localhost:4318"
+
+exporters:
+  debug:
+    verbosity: detailed
+  prometheusremotewrite:
+    endpoint: ${env:PROMETHEUS_REMOTE_WRITE_ENDPOINT}
+    auth:
+      authenticator: sigv4auth
+
+processors:
+  # https://github.com/open-telemetry/opentelemetry-collector/tree/main/processor/memorylimiterprocessor#configuration
+  memory_limiter:
+    check_interval: 1s
+    # In Lambda environments, the collector will share memory with application process, so set a lower limit.
+    limit_percentage: 20
+
+service:
+  extensions: [sigv4auth]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [prometheusremotewrite]
+  telemetry:
+    metrics:
+      address: localhost:8888
