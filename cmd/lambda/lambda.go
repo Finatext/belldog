@@ -32,7 +32,7 @@ func doMain() error {
 	ctx := context.Background()
 	logLevel := new(slog.LevelVar)
 	ops := slog.HandlerOptions{
-		AddSource: true,
+		AddSource: false,
 		Level:     logLevel,
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
