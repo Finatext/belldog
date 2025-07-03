@@ -11,12 +11,12 @@ receivers:
         endpoint: "localhost:4318"
 
 exporters:
-  debug:
-    verbosity: detailed
   prometheusremotewrite:
     endpoint: ${env:PROMETHEUS_REMOTE_WRITE_ENDPOINT}
     auth:
       authenticator: sigv4auth
+    resource_to_telemetry_conversion:
+      enabled: true
 
 processors:
   # https://github.com/open-telemetry/opentelemetry-collector/tree/main/processor/memorylimiterprocessor#configuration
@@ -32,6 +32,3 @@ service:
       receivers: [otlp]
       processors: [memory_limiter]
       exporters: [prometheusremotewrite]
-  telemetry:
-    metrics:
-      address: localhost:8888
