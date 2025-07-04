@@ -58,7 +58,7 @@ func doMain() error {
 
 	logLevel.Set(config.GoLog)
 
-	// Stipped down Lambda collector does not support resource detection, so inject them in application layer.
+	// Stripped down Lambda collector does not support resource detection, so inject them in application layer.
 	lambdaResource, err := lambdadetector.NewResourceDetector().Detect(ctx)
 	if err != nil {
 		return errors.WithStack(err)
