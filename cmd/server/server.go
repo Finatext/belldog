@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Finatext/ssmenv-go"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/caarlos0/env/v11"
@@ -17,7 +18,7 @@ import (
 	"github.com/Finatext/belldog/internal/service"
 	"github.com/Finatext/belldog/internal/slack"
 	"github.com/Finatext/belldog/internal/storage"
-	"github.com/Finatext/ssmenv-go"
+	"github.com/Finatext/belldog/internal/telemetry"
 )
 
 func main() {
@@ -49,6 +50,12 @@ func doMain() error {
 	}
 
 	logLevel.Set(config.GoLog)
+
+	cleanup, err := telemetry.SetupOTel(ctx, nil, &config)
+	if err != nil {
+		return errors.Wrap(err, "failed to setup OpenTelemetry")
+	}
+	defer cleanup()
 
 	slackClient := slack.NewClient(config)
 	ddb, err := storage.NewDDB(ctx, awsConfig, config.DdbTableName)

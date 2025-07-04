@@ -10,6 +10,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/Finatext/belldog/internal/slack"
 )
@@ -56,33 +59,74 @@ func (h *ProxyHandler) Webhook(c echo.Context) error {
 		return err
 	}
 
+	meter := otel.Meter("belldog")
+	attr := metric.WithAttributes(attribute.String("channel_name", res.ChannelName), attribute.String("channel_id", res.ChannelID))
+	totalCounter, err := meter.Int64Counter("webhook.post_message.count")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	totalCounter.Add(ctx, 1, attr)
+
 	switch result.Type {
 	case slack.PostMessageResultOK:
 		slog.InfoContext(ctx, "PostMessage succeeded",
 			slog.String("channel_id", res.ChannelID),
 			slog.String("channel_name", res.ChannelName),
 		)
+		successCounter, err := meter.Int64Counter("webhook.post_message.success.count")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		successCounter.Add(ctx, 1, attr)
 		return c.String(http.StatusOK, "ok.\n")
+
 	case slack.PostMessageResultServerTimeoutFailure:
 		slog.WarnContext(ctx, "PostMessage timeout",
 			slog.String("channel_id", res.ChannelID),
 			slog.String("channel_name", res.ChannelName),
 		)
+		serverTimeoutCounter, err := meter.Int64Counter("webhook.post_message.server_timeout.count")
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		serverTimeoutCounter.Add(ctx, 1, attr)
 		return c.String(http.StatusGatewayTimeout, "Slack API timeout.\n")
+
 	case slack.PostMessageResultServerFailure:
 		msg := fmt.Sprintf("Slack API error: status=%d, body=%s\n", result.StatusCode, result.Body)
 		if result.StatusCode >= 500 && result.StatusCode < 600 {
 			slog.WarnContext(ctx, "PostMessage server error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
+			serverFailureCounter, err := meter.Int64Counter("webhook.post_message.server_failure.count")
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			serverFailureCounter.Add(ctx, 1, attr)
 			return c.String(http.StatusBadGateway, msg)
 		} else if result.StatusCode >= 400 && result.StatusCode < 500 {
 			slog.InfoContext(ctx, "PostMessage client error", slog.Int("status_code", result.StatusCode), slog.String("body", result.Body))
+			clientFailureCounter, err := meter.Int64Counter("webhook.post_message.client_failure.count")
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			clientFailureCounter.Add(ctx, 1, attr)
 			return c.String(result.StatusCode, msg)
 		} else {
+			unknownFailureCounter, err := meter.Int64Counter("webhook.post_message.unknown_failure.count")
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			unknownFailureCounter.Add(ctx, 1, attr)
 			return errors.Newf("unexpected status code from Slack API: code=%d, body=%s", result.StatusCode, result.Body)
 		}
+
 	case slack.PostMessageResultAPIFailure:
 		if result.Reason == "channel_not_found" {
 			msg := fmt.Sprintf("invite bot to the channel: channelName=%s, channelID=%s, reason=%s", result.ChannelName, result.ChannelID, result.Reason)
+			channelNotFoundCounter, err := meter.Int64Counter("webhook.post_message.channel_not_found.count")
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			channelNotFoundCounter.Add(ctx, 1, attr)
 			return c.String(http.StatusBadRequest, msg)
 		} else {
 			slog.WarnContext(ctx, "PostMessage Slack API responses error response",
@@ -90,9 +134,15 @@ func (h *ProxyHandler) Webhook(c echo.Context) error {
 				slog.String("channel_name", res.ChannelName),
 				slog.String("reason", result.Reason),
 			)
+			apiFailureCounter, err := meter.Int64Counter("webhook.post_message.api_failure.count")
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			apiFailureCounter.Add(ctx, 1, attr)
 			msg := fmt.Sprintf("Slack API responses error: reason=%s", result.Reason)
 			return c.String(http.StatusBadRequest, msg)
 		}
+
 	default:
 		return errors.Newf("unexpected PostMessageResult type: %v", result.Type)
 	}
