@@ -7,18 +7,20 @@ import (
 	"os"
 
 	"github.com/Finatext/lambdaurl-buffered"
+	"github.com/Finatext/ssmenv-go"
 	"github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/caarlos0/env/v11"
 	"github.com/cockroachdb/errors"
+	lambdadetector "go.opentelemetry.io/contrib/detectors/aws/lambda"
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
 	"github.com/Finatext/belldog/internal/service"
 	"github.com/Finatext/belldog/internal/slack"
 	"github.com/Finatext/belldog/internal/storage"
-	"github.com/Finatext/ssmenv-go"
+	"github.com/Finatext/belldog/internal/telemetry"
 )
 
 func main() {
@@ -32,7 +34,7 @@ func doMain() error {
 	ctx := context.Background()
 	logLevel := new(slog.LevelVar)
 	ops := slog.HandlerOptions{
-		AddSource: true,
+		AddSource: false,
 		Level:     logLevel,
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &ops))
@@ -55,6 +57,17 @@ func doMain() error {
 	}
 
 	logLevel.Set(config.GoLog)
+
+	// Stripped down Lambda collector does not support resource detection, so inject them in application layer.
+	lambdaResource, err := lambdadetector.NewResourceDetector().Detect(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	cleanup, err := telemetry.SetupOTel(ctx, lambdaResource, &config)
+	if err != nil {
+		return errors.Wrap(err, "failed to setup OpenTelemetry")
+	}
+	defer cleanup()
 
 	slackClient := slack.NewClient(config)
 	ddb, err := storage.NewDDB(ctx, awsConfig, config.DdbTableName)

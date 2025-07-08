@@ -22,4 +22,5 @@ type Config struct {
 	RetryReadTimeoutDuration   time.Duration `env:"RETRY_READ_TIMEOUT_DURATION" envDefault:"5s"`
 	RetryWaitMaxDuration       time.Duration `env:"RETRY_WAIT_MAX_DURATION" envDefault:"10s"`
 	RetryWaitMinDuration       time.Duration `env:"RETRY_WAIT_MIN_DURATION" envDefault:"1s"`
+	NoOTel                     bool          `env:"NO_OTEL" envDefault:"false"`
 }
