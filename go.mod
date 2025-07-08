@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/phsym/console-slog v0.3.1
-	github.com/slack-go/slack v0.17.2
+	github.com/slack-go/slack v0.17.3
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/contrib/detectors/aws/lambda v0.62.0
 	go.opentelemetry.io/otel v1.37.0
