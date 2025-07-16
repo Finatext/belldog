@@ -51,7 +51,7 @@ func doMain() error {
 
 	logLevel.Set(config.GoLog)
 
-	cleanup, err := telemetry.SetupOTel(ctx, nil, &config)
+	_, cleanup, err := telemetry.SetupOTel(ctx, nil, &config)
 	if err != nil {
 		return errors.Wrap(err, "failed to setup OpenTelemetry")
 	}

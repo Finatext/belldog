@@ -63,7 +63,7 @@ func doMain() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	cleanup, err := telemetry.SetupOTel(ctx, lambdaResource, &config)
+	flusher, cleanup, err := telemetry.SetupOTel(ctx, lambdaResource, &config)
 	if err != nil {
 		return errors.Wrap(err, "failed to setup OpenTelemetry")
 	}
@@ -79,10 +79,10 @@ func doMain() error {
 	switch config.Mode {
 	case "proxy":
 		e := handler.NewEchoHandler(config, &slackClient, &tokenSvc)
-		lambda.Start(lambdaurl.Wrap(e))
+		lambda.Start(telemetry.WithFlush(lambdaurl.Wrap(e), flusher))
 	case "batch":
 		h := handler.NewBatchHandler(config, &slackClient, &ddb)
-		lambda.Start(h.HandleCloudWatchEvent)
+		lambda.Start(telemetry.WithFlush(h.HandleCloudWatchEvent, flusher))
 	default:
 		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}
