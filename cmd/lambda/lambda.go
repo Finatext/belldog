@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/caarlos0/env/v11"
 	"github.com/cockroachdb/errors"
-	lambdadetector "go.opentelemetry.io/contrib/detectors/aws/lambda"
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
@@ -58,12 +57,7 @@ func doMain() error {
 
 	logLevel.Set(config.GoLog)
 
-	// Stripped down Lambda collector does not support resource detection, so inject them in application layer.
-	lambdaResource, err := lambdadetector.NewResourceDetector().Detect(ctx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	cleanup, err := telemetry.SetupOTel(ctx, lambdaResource, &config)
+	flusher, cleanup, err := telemetry.SetupOTelLambda(ctx, config)
 	if err != nil {
 		return errors.Wrap(err, "failed to setup OpenTelemetry")
 	}
@@ -79,10 +73,10 @@ func doMain() error {
 	switch config.Mode {
 	case "proxy":
 		e := handler.NewEchoHandler(config, &slackClient, &tokenSvc)
-		lambda.Start(lambdaurl.Wrap(e))
+		lambda.Start(telemetry.WithFlush(lambdaurl.Wrap(e), flusher))
 	case "batch":
 		h := handler.NewBatchHandler(config, &slackClient, &ddb)
-		lambda.Start(h.HandleCloudWatchEvent)
+		lambda.Start(telemetry.WithFlush(h.HandleCloudWatchEvent, flusher))
 	default:
 		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}
