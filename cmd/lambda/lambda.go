@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/caarlos0/env/v11"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-lambda-go/otellambda"
 
 	"github.com/Finatext/belldog/internal/appconfig"
 	"github.com/Finatext/belldog/internal/handler"
@@ -73,10 +74,10 @@ func doMain() error {
 	switch config.Mode {
 	case "proxy":
 		e := handler.NewEchoHandler(config, &slackClient, &tokenSvc)
-		lambda.Start(telemetry.WithFlush(lambdaurl.Wrap(e), flusher))
+		lambda.Start(otellambda.InstrumentHandler(lambdaurl.Wrap(e), otellambda.WithFlusher(flusher)))
 	case "batch":
 		h := handler.NewBatchHandler(config, &slackClient, &ddb)
-		lambda.Start(telemetry.WithFlush(h.HandleCloudWatchEvent, flusher))
+		lambda.Start(otellambda.InstrumentHandler(h.HandleCloudWatchEvent, otellambda.WithFlusher(flusher)))
 	default:
 		return errors.Newf("Unknown `mode` env given: %s", config.Mode)
 	}

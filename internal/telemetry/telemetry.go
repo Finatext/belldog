@@ -2,10 +2,8 @@ package telemetry
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
-	"reflect"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -19,7 +17,13 @@ import (
 	"github.com/Finatext/belldog/internal/appconfig"
 )
 
-type Flusher func(ctx context.Context) error
+type Flusher struct {
+	inner func(ctx context.Context) error
+}
+
+func (f Flusher) ForceFlush(ctx context.Context) error {
+	return f.inner(ctx)
+}
 
 // SetupOTel initializes and setup global state for metrics collection.
 // If config.NoOTel is true, this will setup the No-Op.
@@ -34,7 +38,7 @@ func SetupOTelLambda(ctx context.Context, config appconfig.Config) (Flusher, fun
 	// Stripped down Lambda collector does not support resource detection, so inject them in application layer.
 	lambdaResource, err := lambdadetector.NewResourceDetector().Detect(ctx)
 	if err != nil {
-		return nil, nil, errors.WithStack(err)
+		return Flusher{}, nil, errors.WithStack(err)
 	}
 
 	return setupOTelInner(ctx, lambdaResource, config)
@@ -43,9 +47,9 @@ func SetupOTelLambda(ctx context.Context, config appconfig.Config) (Flusher, fun
 func setupOTelInner(ctx context.Context, base *resource.Resource, config appconfig.Config) (Flusher, func(), error) {
 	if config.NoOTel {
 		// If nothing is set to otel.Meter, the SDK will use the no-op implementation.
-		return func(ctx context.Context) error {
+		return Flusher{inner: func(ctx context.Context) error {
 			return nil
-		}, func() {}, nil
+		}}, func() {}, nil
 	}
 
 	if base == nil {
@@ -53,19 +57,19 @@ func setupOTelInner(ctx context.Context, base *resource.Resource, config appconf
 	} else {
 		b, err := resource.Merge(base, resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName("belldog")))
 		if err != nil {
-			return nil, nil, errors.WithStack(err)
+			return Flusher{}, nil, errors.WithStack(err)
 		}
 		base = b
 	}
 
 	rsc, err := resource.Merge(base, resource.Environment())
 	if err != nil {
-		return nil, nil, errors.WithStack(err)
+		return Flusher{}, nil, errors.WithStack(err)
 	}
 
 	httpExporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {
-		return nil, nil, errors.WithStack(err)
+		return Flusher{}, nil, errors.WithStack(err)
 	}
 	meterProvider := sdk.NewMeterProvider(
 		sdk.WithResource(rsc),
@@ -88,39 +92,5 @@ func setupOTelInner(ctx context.Context, base *resource.Resource, config appconf
 			os.Exit(1)
 		}
 	}
-	return flusher, cleanup, nil
-}
-
-// Take lambda handler function returning a function that flushes the metrics with defer:
-func WithFlush(handler any, flusher func(ctx context.Context) error) any {
-	fv := reflect.ValueOf(handler)
-	ft := fv.Type()
-
-	// Find context.Context parameter if it exists
-	var ctxIndex = -1
-	for i := 0; i < ft.NumIn(); i++ {
-		if ft.In(i) == reflect.TypeOf((*context.Context)(nil)).Elem() {
-			ctxIndex = i
-			break
-		}
-	}
-
-	wrapper := reflect.MakeFunc(ft, func(in []reflect.Value) []reflect.Value {
-		// Extract context if found, otherwise use background context
-		var ctx context.Context
-		if ctxIndex >= 0 && ctxIndex < len(in) && !in[ctxIndex].IsNil() {
-			ctx = in[ctxIndex].Interface().(context.Context)
-		} else {
-			ctx = context.Background()
-		}
-
-		defer func() {
-			if err := flusher(ctx); err != nil {
-				slog.Error("error flushing data", slog.String("error", fmt.Sprintf("%+v", err)))
-			}
-		}()
-		return fv.Call(in)
-	})
-
-	return wrapper.Interface()
+	return Flusher{inner: flusher}, cleanup, nil
 }
