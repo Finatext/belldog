@@ -110,10 +110,10 @@ Endpoint is `<base_url>/slash/` (requires tail slash).
 
 Estimate average item size: 100-150 bytes.
 
-### Lambda instruction set architecture
-Currently only `x86_64` architecture is supported.
-
 ## Development
+### OpenTelemetry Collector
+Run OTel collector to test Otel metrics: https://opentelemetry.io/docs/collector/installation/
+
 ### Upgrade Go version
 - `go.mod`
 - `Dockerfile`
