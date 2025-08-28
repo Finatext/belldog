@@ -50,11 +50,15 @@ func doMain() error {
 	}
 
 	logLevel.Set(config.GoLog)
-	cleanup, err := telemetry.SetupOTel(ctx, config)
+	_, cleanup, err := telemetry.SetupOTel(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to setup OpenTelemetry")
 	}
-	defer cleanup()
+	defer func() {
+		if err := cleanup(); err != nil {
+			slog.Error("failed to cleanup telemetry", slog.String("error", fmt.Sprintf("%+v", err)))
+		}
+	}()
 
 	slackClient := slack.NewClient(config)
 	ddb, err := storage.NewDDB(ctx, awsConfig, config.DdbTableName)
