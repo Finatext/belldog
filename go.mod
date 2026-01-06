@@ -16,7 +16,7 @@ require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/cockroachdb/errors v1.12.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/labstack/echo/v4 v4.14.0
+	github.com/labstack/echo/v4 v4.15.0
 	github.com/phsym/console-slog v0.3.1
 	github.com/slack-go/slack v0.17.3
 	github.com/stretchr/testify v1.11.1
