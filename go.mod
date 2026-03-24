@@ -5,18 +5,18 @@ go 1.25.0
 require (
 	github.com/Finatext/lambdaurl-buffered v0.1.0
 	github.com/Finatext/ssmenv-go v0.1.0
-	github.com/aws/aws-lambda-go v1.53.0
+	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.41.4
 	github.com/aws/aws-sdk-go-v2/config v1.32.12
-	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.35
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.56.2
+	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.36
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.3
 	github.com/caarlos0/env/v11 v11.4.0
 	github.com/cockroachdb/errors v1.12.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/phsym/console-slog v0.3.1
-	github.com/slack-go/slack v0.19.0
+	github.com/slack-go/slack v0.20.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-lambda-go/otellambda v0.67.0
 	go.opentelemetry.io/otel v1.42.0
