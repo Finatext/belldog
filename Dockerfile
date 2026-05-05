@@ -10,7 +10,7 @@ COPY . ./
 # `-tags lambda.norpc` to reduce binary size: https://docs.aws.amazon.com/lambda/latest/dg/go-image.html#go-image-provided
 RUN CGO_ENABLED=0 GOOS=linux go build -v -tags lambda.norpc -ldflags '-w -s' -o /usr/local/bin/app github.com/Finatext/belldog/cmd/lambda
 
-FROM ubuntu:24.04 AS collector
+FROM ubuntu:26.04 AS collector
 RUN apt-get update && apt-get install -y curl unzip
 ARG TARGETARCH
 # SHA256 sum is from the GitHub release page.
